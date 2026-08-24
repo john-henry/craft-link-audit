@@ -210,26 +210,6 @@ class UrlActionsController extends BaseController
     }
 
     /**
-     * The verdict a JSON caller wants back after a check.
-     *
-     * @param array<string, mixed> $fresh The row as it stands after the check.
-     * @param UrlStatus $status The row's status.
-     * @return array<string, mixed> The payload.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _verdictPayload(array $fresh, UrlStatus $status): array
-    {
-        return [
-            'status' => $status->value,
-            'label' => $status->label(),
-            'colour' => $status->colour(),
-            'httpStatus' => $fresh['httpStatus'] !== null ? (int)$fresh['httpStatus'] : null,
-            'checked' => $this->_formatDate($fresh['dateLastChecked']),
-        ];
-    }
-
-    /**
      * The hash the request is asking about.
      *
      * @return string The hash.
@@ -304,5 +284,25 @@ class UrlActionsController extends BaseController
         $this->requireReadableUrl((int)$row['id']);
 
         return $row;
+    }
+
+    /**
+     * The verdict a JSON caller wants back after a check.
+     *
+     * @param array<string, mixed> $fresh The row as it stands after the check.
+     * @param UrlStatus $status The row's status.
+     * @return array<string, mixed> The payload.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _verdictPayload(array $fresh, UrlStatus $status): array
+    {
+        return [
+            'status' => $status->value,
+            'label' => $status->label(),
+            'colour' => $status->colour(),
+            'httpStatus' => $fresh['httpStatus'] !== null ? (int)$fresh['httpStatus'] : null,
+            'checked' => $this->_formatDate($fresh['dateLastChecked']),
+        ];
     }
 }

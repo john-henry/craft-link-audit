@@ -1,4 +1,4 @@
-[![Stable Version](https://img.shields.io/packagist/v/johnhenry/craft-link-audit?label=stable&style=for-the-badge)]((https://packagist.org/packages/johnhenry/craft-link-audit))
+[![Stable Version](https://img.shields.io/packagist/v/johnhenry/craft-link-audit?label=stable&style=for-the-badge)](https://packagist.org/packages/johnhenry/craft-link-audit)
 [![Static Badge](https://img.shields.io/badge/free-plugin?style=for-the-badge&logo=craftcms&logoColor=white&logoSize=auto&label=Craft%20Plugin%20Store&labelColor=%23E5422B)](https://plugins.craftcms.com/link-audit?craft5)
 
 
@@ -61,6 +61,9 @@ Need a hand? Open an issue on our [GitHub Issues page](https://github.com/john-h
 ## License
 
 This package is licensed for free under the MIT License.
+
+The control panel tour is built on [Driver.js](https://driverjs.com) 1.8.0, which is vendored with
+the plugin and is itself MIT licensed. The details are in `src/assets/tour/dist/LICENSE.md`.
 
 ## Requirements
 

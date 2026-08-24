@@ -4,9 +4,13 @@
  * @copyright Copyright (c) John Henry Donovan
  */
 
+use craft\helpers\Db;
 use johnhenry\linkaudit\assets\tour\TourAsset;
 use johnhenry\linkaudit\controllers\BaseController;
+use johnhenry\linkaudit\enums\ScanMode;
+use johnhenry\linkaudit\enums\ScanStatus;
 use johnhenry\linkaudit\LinkAudit;
+use johnhenry\linkaudit\records\ScanRecord;
 use johnhenry\linkaudit\services\TourService;
 use markhuot\craftpest\factories\User as UserFactory;
 use yii\web\BadRequestHttpException;
@@ -26,6 +30,26 @@ use yii\web\MethodNotAllowedHttpException;
 // Helper names carry a `tour` prefix: Pest loads every test file into one
 // process, so a bare helper name would collide with another file's.
 // ---------------------------------------------------------------------------
+
+/**
+ * A scan row, so the Overview has the panes the tour is about.
+ *
+ * The tour only opens itself on an install that has something to be shown, so a
+ * screen with nothing on it is its own case and the rest of these need a run on
+ * the board.
+ */
+function tourScan(ScanStatus $status = ScanStatus::Complete): void
+{
+    Db::insert(ScanRecord::tableName(), [
+        'siteId' => Craft::$app->getSites()->getPrimarySite()->id,
+        'mode' => ScanMode::Full->value,
+        'status' => $status->value,
+        'dateStarted' => Db::prepareDateForDb(new DateTime('-1 minute')),
+        'dateFinished' => $status === ScanStatus::Complete
+            ? Db::prepareDateForDb(new DateTime())
+            : null,
+    ]);
+}
 
 /** The tour service. */
 function tourService(): TourService
@@ -53,6 +77,13 @@ function tourReader(array $permissions = [BaseController::PERMISSION_VIEW_REPORT
 
     return $user;
 }
+
+// Whatever the developer's own database is carrying, these tests decide for
+// themselves whether the install has ever been scanned. Cleared inside the
+// test's own transaction, so it comes back on rollback.
+beforeEach(function() {
+    Craft::$app->getDb()->createCommand()->delete(ScanRecord::tableName())->execute();
+});
 
 describe('TourService', function() {
     it('has not been seen by somebody who has never opened it', function() {
@@ -133,6 +164,7 @@ describe('TourAsset', function() {
 describe('The Overview', function() {
     it('carries the tour, its steps and the word to start it for a fresh reader', function() {
         tourReader();
+        tourScan();
 
         $this->get('admin/link-audit')
             ->assertOk()
@@ -143,8 +175,36 @@ describe('The Overview', function() {
             ->assertSee('Where things stand');
     });
 
+    // The counts, the last run and the two tables are what the tour is about,
+    // and none of them are on the page until something has been scanned. Opened
+    // there, it would walk a reader past the one button that is on the screen
+    // and then mark itself seen, so the reader who most needed it would never be
+    // offered it again.
+    it('does not open itself on an install that has never been scanned', function() {
+        tourReader();
+
+        $this->get('admin/link-audit')
+            ->assertOk()
+            ->assertSee('"autoStart":false', false)
+            // Still there to be asked for, which is the whole point of leaving
+            // it alone rather than taking it away.
+            ->assertSee('Take the tour');
+    });
+
+    // A scan that is still running has put the progress pane and the tiles on
+    // the page, so there is something to be shown round.
+    it('opens itself while the first scan is still running', function() {
+        tourReader();
+        tourScan(ScanStatus::Checking);
+
+        $this->get('admin/link-audit')
+            ->assertOk()
+            ->assertSee('"autoStart":true', false);
+    });
+
     it('leaves the tour alone for a reader who has had it', function() {
         $user = tourReader();
+        tourScan();
         tourService()->markSeen($user);
 
         $this->get('admin/link-audit')
@@ -169,6 +229,7 @@ describe('TourController::actionSeen', function() {
 
     it('turns the autostart off for the next page load', function() {
         tourReader();
+        tourScan();
 
         $this->postJson('actions/link-audit/tour/seen')->assertOk();
 

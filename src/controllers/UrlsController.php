@@ -345,6 +345,8 @@ class UrlsController extends BaseController
         $filters = $this->reportFilters();
         $user = Craft::$app->getUser();
 
+        $this->registerJsTranslations();
+
         return $this->renderTemplate($template, [
             'canRecheck' => $user->checkPermission(self::PERMISSION_RUN_SCANS),
             'canIgnore' => $user->checkPermission(self::PERMISSION_MANAGE_IGNORES),

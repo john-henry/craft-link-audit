@@ -653,8 +653,8 @@ class ReportService extends Component
      * For the screens themselves, which want the number up front so they can
      * offer a proper empty state rather than an empty table with a paginator
      * under it. Asking {@see self::urlTable()} for one row to read its total off
-     * paid for the whole sort, including the correlated reference count, to
-     * throw the row away again.
+     * would pay for the whole sort, including the correlated reference count,
+     * only to throw the row away again.
      *
      * @param UrlStatus $status The verdict to count.
      * @param int $siteId The site being read.

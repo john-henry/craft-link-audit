@@ -14,9 +14,10 @@ use johnhenry\linkaudit\LinkAudit;
 /**
  * Stores the plugin's settings.
  *
- * Every value a scan reads lives here, in five groups: what gets scanned, how
- * the HTTP checker behaves, how long a verdict is trusted, what is ignored, and
- * who hears about it.
+ * Every value a scan reads lives here, grouped the way the settings screen is
+ * tabbed: what gets scanned, how the HTTP checker behaves, how long a verdict
+ * is trusted, what is ignored, who hears about it, and when a scan runs by
+ * itself.
  *
  * @author John Henry Donovan
  * @since 1.0.0

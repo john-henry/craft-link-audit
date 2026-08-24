@@ -68,6 +68,16 @@ class ScanService extends Component
     private const _ABANDONED_AFTER_MINUTES = 60;
 
     /**
+     * @var int How many orphaned URL rows are deleted at a time.
+     *
+     * A site that has just had a section emptied can orphan tens of thousands of
+     * rows at once, and one delete over the lot of them holds a lock on the URL
+     * table for as long as it takes. Bounded like this it is a series of short
+     * writes that a scan running alongside can get in between.
+     */
+    private const _ORPHAN_BATCH_SIZE = 500;
+
+    /**
      * @var int How long a URL row nothing points at is left alone before it
      * counts as an orphan, so a row waiting on its reference rows is not deleted
      * out from under the insert that is about to point at it.
@@ -359,8 +369,8 @@ class ScanService extends Component
                 $urlId = $store->upsert($link->url, $link->isInternal(), $link->siteId, $link->initialStatus());
                 // Grouped under the site being extracted, never the link's own
                 // site: a reference tag pinned to another site (`{entry:29@1:url}`
-                // met while reading site 2) still sits on THIS site's page, and
-                // filing it under site 1 would hand the whole of site 1's
+                // met while reading site 2) still sits on the page being read,
+                // and filing it under site 1 would hand the whole of site 1's
                 // reference set to a replace call carrying one row.
                 $refs["$link->elementId:$siteId"][] = $link->toReference($urlId, $scanId);
                 // An ignore rule is asked first, so a URL nobody wants checked
@@ -676,25 +686,50 @@ class ScanService extends Component
      * hour is far longer than that window and far shorter than the gap between
      * scans, so a genuine orphan waits at most until the next run.
      *
+     * Done a batch at a time, and found with a join rather than a NOT IN over a
+     * subquery. Emptying a section orphans every URL that only appeared in it,
+     * which on a big site is tens of thousands of rows, and one delete over the
+     * lot holds a lock on the URL table for the whole of it while the same
+     * table is what every check phase is writing to.
+     *
      * @return int How many rows went.
      * @author John Henry Donovan
      * @since 1.0.0
      */
     public function pruneOrphanUrls(): int
     {
-        $referenced = (new Query())
-            ->select(['urlId'])
-            ->from([ReferenceRecord::tableName()]);
-
         $cutOff = DateTimeHelper::now()->modify('-' . self::_ORPHAN_GRACE_MINUTES . ' minutes');
+        $db = Craft::$app->getDb();
+        $deleted = 0;
 
-        return Craft::$app->getDb()->createCommand()
-            ->delete(UrlRecord::tableName(), [
-                'and',
-                ['not', ['id' => $referenced]],
-                ['<', 'dateFirstSeen', Db::prepareDateForDb($cutOff)],
-            ])
-            ->execute();
+        while (true) {
+            // A left join with nothing on the far side of it is the same set as
+            // a NOT IN over every referenced id, without the subquery being
+            // rebuilt for every candidate row, and it cannot go wrong the way
+            // NOT IN does when the subquery has a null in it.
+            $ids = (new Query())
+                ->select(['u.id'])
+                ->from(['u' => UrlRecord::tableName()])
+                ->leftJoin(['r' => ReferenceRecord::tableName()], '[[r.urlId]] = [[u.id]]')
+                ->where(['r.id' => null])
+                ->andWhere(['<', 'u.dateFirstSeen', Db::prepareDateForDb($cutOff)])
+                ->limit(self::_ORPHAN_BATCH_SIZE)
+                ->column();
+
+            if ($ids === []) {
+                return $deleted;
+            }
+
+            $deleted += $db->createCommand()
+                ->delete(UrlRecord::tableName(), ['id' => $ids])
+                ->execute();
+
+            // A short batch is the last one, so the next read is not worth the
+            // round trip.
+            if (count($ids) < self::_ORPHAN_BATCH_SIZE) {
+                return $deleted;
+            }
+        }
     }
 
     /**
@@ -1131,30 +1166,6 @@ class ScanService extends Component
     }
 
     /**
-     * Clears everything the rendered crawl ever found, once it has been switched
-     * off.
-     *
-     * Turning the crawl off has to take its findings off the report, or an
-     * install that tried it and thought better of it would be left carrying a
-     * list of template links that nothing will ever check or refresh again.
-     * Nothing happens at all while the crawl is on, which is the usual case.
-     *
-     * @return int How many rows went.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _pruneRenderedReferences(): int
-    {
-        if ($this->_settings()->renderedCrawlEnabled) {
-            return 0;
-        }
-
-        return Craft::$app->getDb()->createCommand()
-            ->delete(ReferenceRecord::tableName(), ['source' => ExtractedLink::SOURCE_RENDERED])
-            ->execute();
-    }
-
-    /**
      * Reports a finished scan to whoever asked to hear about it.
      *
      * Last thing, once the scan is closed and its totals are final, so what goes
@@ -1176,6 +1187,30 @@ class ScanService extends Component
         } catch (Throwable $e) {
             Craft::error("Could not report scan {$scan['id']}: {$e->getMessage()}", 'link-audit');
         }
+    }
+
+    /**
+     * Clears everything the rendered crawl ever found, once it has been switched
+     * off.
+     *
+     * Turning the crawl off has to take its findings off the report, or an
+     * install that tried it and thought better of it would be left carrying a
+     * list of template links that nothing will ever check or refresh again.
+     * Nothing happens at all while the crawl is on, which is the usual case.
+     *
+     * @return int How many rows went.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _pruneRenderedReferences(): int
+    {
+        if ($this->_settings()->renderedCrawlEnabled) {
+            return 0;
+        }
+
+        return Craft::$app->getDb()->createCommand()
+            ->delete(ReferenceRecord::tableName(), ['source' => ExtractedLink::SOURCE_RENDERED])
+            ->execute();
     }
 
     /**
@@ -1228,8 +1263,8 @@ class ScanService extends Component
      * {@see ExtractedLink::standInScheme()}, rather than off the row's own
      * `scheme` column: that column is written by a URL parser that is not being
      * asked a question it can safely answer here, see that method for why, so the
-     * column may hold nothing usable on a stand-in row. Reading the URL means any
-     * such row resolves correctly on its next recheck, with no backfill needed.
+     * column may hold nothing usable on a stand-in row. The URL always carries
+     * the scheme, so it is the one source that can be trusted on every row.
      *
      * @param array<string, mixed> $row The URL row.
      * @return Verdict|null The verdict, or null when the row is a file-shaped

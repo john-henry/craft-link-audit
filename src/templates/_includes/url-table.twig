@@ -58,7 +58,7 @@
             }|filter(value => value is not null and value != '') %}
 
             <div class="field">
-                <a class="btn" data-icon="download"
+                <a class="btn" data-icon="download" id="link-audit-export"
                    href="{{ actionUrl('link-audit/export/csv', exportParams) }}">
                     {{ 'Download CSV'|t('link-audit') }}
                 </a>
@@ -93,10 +93,10 @@
     (function() {
         'use strict';
 
-        // Vue replaces the mount element with its own rendered DOM, so click
-        // listeners must sit on this outer wrapper, which Vue never touches.
-        // Listening on the mount element itself leaves the listeners on a
-        // detached node and every button on the table plays dead.
+        // Vue replaces the mount element with its own rendered DOM, so every
+        // delegated listener must sit on this outer wrapper, which Vue never
+        // touches. Listening on the mount element itself leaves the listeners
+        // on a detached node and every button on the table plays dead.
         var container = document.getElementById('link-audit-table-wrap');
         var isRedirects = {{ (verdict == 'redirect') ? 'true' : 'false' }};
         var canAct = {{ (canRecheck or canIgnore) ? 'true' : 'false' }};
@@ -174,9 +174,9 @@
         // A redirect is followed to wherever it lands, so the code on the row is
         // the last hop's and reads as a plain green 200 with nothing saying the
         // link moved at all. Where the first hop's own code was recorded, both
-        // are drawn: what the address answered, then where it ended up. A row
-        // checked before that code was kept carries none, and reads as it
-        // always did until its next check.
+        // are drawn: what the address answered, then where it ended up. Not
+        // every row carries that first code, and one that does not draws the
+        // landing code on its own.
         function codeCell(value) {
             if (!value || !value.status) {
                 return '';
@@ -300,6 +300,50 @@
                 ? Craft.t('link-audit', 'Nothing matches those filters. Loosen them and the rest comes back.')
                 : {{ emptyMessage|json_encode|raw }},
             tableDataEndpoint: 'link-audit/urls/table?' + query,
+        });
+
+        var exportLink = document.getElementById('link-audit-export');
+        var exportHref = exportLink !== null ? exportLink.getAttribute('href') : '';
+        var searchTimer = null;
+
+        // The search box belongs to the table component rather than to the
+        // filter bar, so it never reaches the page's own URL and the server has
+        // nothing to build the Download CSV link with. The link is rewritten
+        // here instead, as the box is typed in and when it is cleared, so
+        // pressing Download hands the reader the rows in front of them rather
+        // than the whole list again.
+        function syncExportHref() {
+            if (exportLink === null) {
+                return;
+            }
+
+            var field = container.querySelector('.texticon.search input[type="text"]');
+            var term = field !== null ? field.value.trim() : '';
+            var separator = exportHref.indexOf('?') === -1 ? '?' : '&';
+
+            exportLink.setAttribute(
+                'href',
+                term === '' ? exportHref : exportHref + separator + 'search=' + encodeURIComponent(term)
+            );
+        }
+
+        container.addEventListener('input', function(event) {
+            if (!event.target.closest('.texticon.search')) {
+                return;
+            }
+
+            window.clearTimeout(searchTimer);
+            searchTimer = window.setTimeout(syncExportHref, 250);
+        });
+
+        // The clear button empties the box without anybody typing in it, and
+        // Vue redraws the field on its own tick, so the read waits a turn.
+        container.addEventListener('click', function(event) {
+            if (!event.target.closest('.clear-btn')) {
+                return;
+            }
+
+            window.setTimeout(syncExportHref, 0);
         });
 
         container.addEventListener('click', function(event) {
