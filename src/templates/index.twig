@@ -149,6 +149,46 @@
                     </tr>
                 </tbody>
             </table>
+            {% if canRunScans %}
+                <form method="post" accept-charset="UTF-8" id="link-audit-cancel-scan"
+                      data-confirm="{{ 'Stop the scan? Everything it has already checked stays on the report, and the content it never reached is read by the next scan.'|t('link-audit') }}">
+                    {{ csrfInput() }}
+                    {{ actionInput('link-audit/scans/cancel') }}
+                    {{ redirectInput('link-audit?site=' ~ siteHandle) }}
+                    <button type="submit" class="btn caution">
+                        <span class="label">{{ 'Stop this scan'|t('link-audit') }}</span>
+                        <div class="spinner spinner-absolute"></div>
+                    </button>
+                </form>
+
+                {% js %}
+                (function() {
+                    'use strict';
+
+                    var form = document.getElementById('link-audit-cancel-scan');
+
+                    if (!form) {
+                        return;
+                    }
+
+                    // The sentence is translated on the server and carried on the
+                    // form: a string only this one confirm uses has no business
+                    // being registered with Craft.t() as well.
+                    form.addEventListener('submit', function(event) {
+                        if (!window.confirm(form.getAttribute('data-confirm'))) {
+                            event.preventDefault();
+
+                            return;
+                        }
+
+                        if (event.submitter) {
+                            event.submitter.classList.add('loading');
+                            event.submitter.setAttribute('aria-busy', 'true');
+                        }
+                    });
+                })();
+                {% endjs %}
+            {% endif %}
         </div>
 
         {% js %}
