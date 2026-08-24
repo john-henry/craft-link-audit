@@ -397,7 +397,11 @@ class ReportService extends Component
     }
 
     /**
-     * The last scan to finish.
+     * The last scan to finish, whether it ran to the end or was stopped.
+     *
+     * A cancelled run counts. Everything it read and checked before it was
+     * stopped is on the report, so pretending nothing has been scanned would
+     * misdescribe every screen that leans on this answer.
      *
      * @return array<string, mixed>|null The scan row with its duration worked
      *                                   out, or null when nothing has finished
@@ -409,7 +413,7 @@ class ReportService extends Component
     {
         $row = (new Query())
             ->from([ScanRecord::tableName()])
-            ->where(['status' => ScanStatus::Complete->value])
+            ->where(['status' => [ScanStatus::Complete->value, ScanStatus::Cancelled->value]])
             ->orderBy(['dateFinished' => SORT_DESC, 'id' => SORT_DESC])
             ->one();
 

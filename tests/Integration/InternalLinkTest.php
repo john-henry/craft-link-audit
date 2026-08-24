@@ -262,8 +262,18 @@ it('says an element link to a live entry is fine', function() {
     expect($verdict->status)->toBe(UrlStatus::Ok);
 });
 
-it('calls an element link to a disabled entry broken', function() {
+it('leaves an element link to a disabled entry with a URL to the check phase, because a redirect may be answering for it', function() {
+    // The template renders the target's URL whether the entry is enabled or
+    // not, so the address a visitor's click actually hits may be covered by
+    // a redirect. Only the server can say.
     $entry = ilEntry(enabled: false);
+    $verdict = ilResolver()->resolveElement($entry->id, Entry::class, ilSiteId());
+
+    expect($verdict)->toBeNull();
+});
+
+it('calls an element link to a disabled entry with no URL broken', function() {
+    $entry = ilNoUrlEntry(enabled: false);
     $verdict = ilResolver()->resolveElement($entry->id, Entry::class, ilSiteId());
 
     expect($verdict->status)->toBe(UrlStatus::Broken)
