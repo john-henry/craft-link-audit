@@ -1,0 +1,16 @@
+includes:
+    - %currentWorkingDirectory%/vendor/craftcms/phpstan/phpstan.neon
+
+parameters:
+    level: 5
+    paths:
+        - src
+
+    # Commerce is an optional integration: the only references to it are
+    # ::class constants behind class_exists() guards, so there is no API
+    # surface for PHPStan to check and pulling the whole of Commerce into CI
+    # for two constants is not worth the install. Unmatched ignores are not
+    # reported because these errors only exist where Commerce is absent.
+    reportUnmatchedIgnoredErrors: false
+    ignoreErrors:
+        - '#Class craft\\commerce\\elements\\(Product|Variant) not found#'

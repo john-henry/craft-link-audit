@@ -1,0 +1,38 @@
+{% extends '_layouts/cp' %}
+
+{% set title = 'Broken'|t('link-audit') %}
+{% set selectedSubnavItem = 'broken' %}
+{% set crumbs = [
+    { label: 'Link Audit'|t('link-audit'), url: cpUrl('link-audit') },
+    { label: title },
+] %}
+
+{% if sites|length > 1 %}
+    {% set crumbs = [{
+        id: 'site-crumb',
+        icon: 'world',
+        label: site.name|t('site'),
+        menu: { items: siteMenuItems(sites, site), label: 'Select site'|t('app') },
+    }]|merge(crumbs) %}
+{% endif %}
+
+{% block content %}
+    <p class="light">
+        {{ 'These are gone. The website answered with a 404 or a 410, the codes for a page that is not there any more, or the link failed enough times in a row to be counted as gone. Each one is a link somebody clicks and lands nowhere, so put the right address in or take the link out.'|t('link-audit') }}
+    </p>
+
+    {% include 'link-audit/_includes/url-table' with {
+        verdict: verdict,
+        siteId: siteId,
+        siteHandle: siteHandle,
+        filters: filters,
+        hostOptions: hostOptions,
+        elementTypeOptions: elementTypeOptions,
+        sourceOptions: sourceOptions,
+        perPage: perPage,
+        total: total,
+        canRecheck: canRecheck,
+        canIgnore: canIgnore,
+        emptyMessage: 'Nothing broken on this site. Long may it last.'|t('link-audit'),
+    } only %}
+{% endblock %}

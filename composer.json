@@ -1,0 +1,75 @@
+{
+  "name": "johnhenry/craft-link-audit",
+  "description": "Finds broken links across your content, checks each unique URL once, and tells you exactly which entries to fix",
+  "type": "craft-plugin",
+  "version": "1.0.0-beta.1",
+  "keywords": [
+    "craft",
+    "cms",
+    "craftcms",
+    "craft-plugin",
+    "links",
+    "broken-links",
+    "link-checker",
+    "seo"
+  ],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "John Henry",
+      "homepage": "https://johnhenry.ie"
+    }
+  ],
+  "homepage": "https://johnhenry.ie/plugins/link-audit/",
+  "require": {
+    "php": "^8.2 || ^8.3 || ^8.4",
+    "craftcms/cms": "^5.0"
+  },
+  "require-dev": {
+    "craftcms/ecs": "dev-main",
+    "craftcms/html-field": "^1.0 || ^2.0 || ^3.0",
+    "craftcms/phpstan": "dev-main",
+    "verbb/hyper": "^2.0 || ^3.0",
+    "verbb/navigation": "^3.0"
+  },
+  "suggest": {
+    "craftcms/ckeditor": "Links in CKEditor content are read from the stored HTML, nested entries and all",
+    "verbb/hyper": "Hyper field links are read the same way native Link field values are",
+    "verbb/navigation": "Custom URLs on navigation nodes are scanned alongside your content"
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "autoload": {
+    "psr-4": {
+      "johnhenry\\linkaudit\\": "src/"
+    }
+  },
+  "scripts": {
+    "phpstan": "phpstan --ansi --memory-limit=1G",
+    "check-cs": "ecs check --ansi",
+    "fix-cs": "ecs check --fix --ansi"
+  },
+  "config": {
+    "allow-plugins": {
+      "craftcms/plugin-installer": true,
+      "pestphp/pest-plugin": true,
+      "yiisoft/yii2-composer": true
+    },
+    "optimize-autoloader": true,
+    "sort-packages": true
+  },
+  "support": {
+    "docs": "https://johnhenry.ie/plugins/link-audit/",
+    "source": "https://github.com/john-henry/craft-link-audit",
+    "issues": "https://github.com/john-henry/craft-link-audit/issues"
+  },
+  "extra": {
+    "name": "Link Audit",
+    "handle": "link-audit",
+    "developer": "John Henry",
+    "developerUrl": "https://johnhenry.ie",
+    "documentationUrl": "https://johnhenry.ie/plugins/link-audit/",
+    "changelogUrl": "https://github.com/john-henry/craft-link-audit/blob/craft-5/CHANGELOG.md",
+    "class": "johnhenry\\linkaudit\\LinkAudit"
+  }
+}

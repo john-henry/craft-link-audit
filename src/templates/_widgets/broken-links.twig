@@ -1,0 +1,51 @@
+{% set query = scopedSite ? { site: scopedSite.handle } : {} %}
+
+{% if latestScan is null %}
+    <div class="zilch">
+        <p>{{ 'Nothing has been scanned yet.'|t('link-audit') }}</p>
+        <p>
+            <a class="go" href="{{ cpUrl('link-audit', query) }}">{{ 'Run a scan'|t('link-audit') }}</a>
+        </p>
+    </div>
+{% else %}
+    <div class="flex" style="flex-wrap:wrap;gap:28px">
+        <div>
+            <div style="font-size:28px;line-height:1.2">
+                <a href="{{ cpUrl('link-audit/broken', query) }}">{{ broken }}</a>
+            </div>
+            <div class="light flex" style="align-items:center;gap:6px">
+                <span class="status {{ broken > 0 ? 'red' : 'green' }}"></span>
+                {{ 'Broken'|t('link-audit') }}
+            </div>
+        </div>
+        <div>
+            <div style="font-size:28px;line-height:1.2">
+                <a href="{{ cpUrl('link-audit/redirects', query|merge({ permanent: '1' })) }}">{{ permanentRedirects }}</a>
+            </div>
+            <div class="light flex" style="align-items:center;gap:6px;flex-wrap:wrap">
+                <span class="status blue"></span>
+                {{ 'Permanent Redirects'|t('link-audit') }}
+                <span class="info" style="width:1.25em">{{ 'The pages these links point at have moved for good, and your content still carries the old addresses. The links still work, but they are worth updating.'|t('link-audit') }}</span>
+            </div>
+        </div>
+    </div>
+
+    <p class="light" style="margin-top:14px">
+        {% if multiSite %}
+            {% if scopedSite %}
+                {{ 'Counting {site} only.'|t('link-audit', { site: scopedSite.name|t('site') }) }}
+            {% else %}
+                {{ 'Counting every site you can edit.'|t('link-audit') }}
+            {% endif %}
+        {% endif %}
+        {% if latestScan.dateFinished %}
+            {{ 'Last scanned {date}'|t('link-audit', { date: latestScan.dateFinished|datetime('short') }) }}
+        {% else %}
+            {{ 'Last scan finished at an unknown time'|t('link-audit') }}
+        {% endif %}
+    </p>
+
+    <p>
+        <a class="go" href="{{ cpUrl('link-audit', query) }}">{{ 'Open Link Audit'|t('link-audit') }}</a>
+    </p>
+{% endif %}

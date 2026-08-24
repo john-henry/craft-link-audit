@@ -1,0 +1,292 @@
+{% extends '_layouts/cp' %}
+
+{% import '_includes/forms.twig' as forms %}
+
+{% set title = 'URL'|t('link-audit') %}
+{% set returnUrl = 'link-audit/url?hash=' ~ url.urlHash %}
+{% set crumbs = [
+    { label: 'Link Audit'|t('link-audit'), url: cpUrl('link-audit') },
+    { label: title },
+] %}
+
+{% if sites|length > 1 %}
+    {% set crumbs = [{
+        id: 'site-crumb',
+        icon: 'world',
+        label: site.name|t('site'),
+        menu: { items: siteMenuItems(sites, site), label: 'Select site'|t('app') },
+    }]|merge(crumbs) %}
+{% endif %}
+
+{% block content %}
+    <div class="pane">
+        <div class="flex" style="align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="status {{ statusColour }}"></span>
+            <strong>{{ statusLabel }}</strong>
+            {% if url.httpStatus %}
+                {% if url.redirectStatus %}
+                    {% set redirectKind = url.redirectStatus < 300 ? '2xx' : (url.redirectStatus < 400 ? '3xx' : (url.redirectStatus < 500 ? '4xx' : '5xx')) %}
+                    <span class="link-audit-code link-audit-code--{{ redirectKind }}" title="{{ redirectCodeTitle }}">{{ url.redirectStatus }}</span>
+                    <span class="light">&rarr;</span>
+                {% endif %}
+                {% set codeKind = url.httpStatus < 300 ? '2xx' : (url.httpStatus < 400 ? '3xx' : (url.httpStatus < 500 ? '4xx' : '5xx')) %}
+                <span class="link-audit-code link-audit-code--{{ codeKind }}" title="{{ codeTitle }}">{{ url.httpStatus }}</span>
+                <span class="light">
+                    {% if url.redirectStatus %}
+                        {{ 'what the address answered with, then where it ended up'|t('link-audit') }}
+                    {% else %}
+                        {{ 'the code the server answered with'|t('link-audit') }}
+                    {% endif %}
+                </span>
+            {% endif %}
+        </div>
+
+        <p style="margin-top:10px;word-break:break-all">
+            {% if isOpenable %}
+                <a href="{{ url.url }}" target="_blank" rel="noopener noreferrer" data-icon="external" style="display:inline-flex;align-items:center;gap:6px">{{ url.url }}</a>
+            {% else %}
+                {{ url.url }}
+                <span class="light">{{ 'Not opened from here: the plugin only follows http and https.'|t('link-audit') }}</span>
+            {% endif %}
+        </p>
+
+        {% css %}
+        .link-audit-code { display: inline-block; padding: 1px 7px; border-radius: var(--radius-md); font-size: 12px; font-weight: 600; }
+        .link-audit-code--2xx { background: var(--bg-success); color: var(--fg-success); }
+        .link-audit-code--3xx { background: var(--bg-notice); color: var(--fg-notice); }
+        .link-audit-code--4xx { background: var(--bg-error); color: var(--fg-error); }
+        .link-audit-code--5xx { background: var(--bg-warning); color: var(--fg-warning); }
+        .link-audit-meta { background-color: var(--gray-050); }
+        .link-audit-meta > .data:not(:first-child) { border-block-start: 1px solid var(--border-hairline); }
+        .link-audit-meta > .data > .heading,
+        .link-audit-meta > .data > .value { display: flex; align-items: center; margin: 0; }
+        .link-audit-meta > details { border-block-start: 1px solid var(--border-hairline); padding: var(--s) var(--m); }
+        .link-audit-meta > details > summary { cursor: pointer; }
+        .link-audit-meta > details > p { margin-block: var(--s) 0; }
+        {% endcss %}
+        <div class="meta read-only link-audit-meta" style="margin-top:14px;border-radius:var(--large-border-radius)">
+            {% if url.reason %}
+                <div class="data">
+                    <dt class="heading">{{ 'Why'|t('link-audit') }}</dt>
+                    <dd class="value">{{ reasonLabel }}</dd>
+                </div>
+            {% endif %}
+            {% if url.message %}
+                <div class="data">
+                    <dt class="heading">{{ 'What Came Back'|t('link-audit') }}</dt>
+                    <dd class="value">{{ url.message }}</dd>
+                </div>
+            {% endif %}
+            {% if url.responseTimeMs %}
+                <div class="data">
+                    <dt class="heading">{{ 'Took'|t('link-audit') }}</dt>
+                    <dd class="value">{{ '{ms} ms'|t('link-audit', { ms: url.responseTimeMs }) }}</dd>
+                </div>
+            {% endif %}
+            {% if url.finalUrl %}
+                <div class="data">
+                    <dt class="heading">{{ 'Ends Up At'|t('link-audit') }}</dt>
+                    <dd class="value" style="word-break:break-all">
+                        {{ url.finalUrl }}
+                        <span class="light">
+                            {{ '{count, plural, =1{one hop} other{# hops}}'|t('link-audit', { count: url.redirectCount }) }}
+                            {% if url.redirectPermanent %}
+                                {{ ', permanent'|t('link-audit') }}
+                            {% elseif url.redirectPermanent is not null %}
+                                {{ ', temporary'|t('link-audit') }}
+                            {% endif %}
+                        </span>
+                    </dd>
+                </div>
+            {% endif %}
+            <div class="data">
+                <dt class="heading">{{ 'First Seen'|t('link-audit') }}</dt>
+                <dd class="value">{{ url.dateFirstSeen ? url.dateFirstSeen|datetime('short') : '-' }}</dd>
+            </div>
+            <div class="data">
+                <dt class="heading">{{ 'Last Checked'|t('link-audit') }}</dt>
+                <dd class="value">{{ url.dateLastChecked ? url.dateLastChecked|datetime('short') : '-' }}</dd>
+            </div>
+            <div class="data">
+                <dt class="heading">{{ 'Last Worked'|t('link-audit') }}</dt>
+                <dd class="value">{{ url.dateLastOk ? url.dateLastOk|datetime('short') : '-' }}</dd>
+            </div>
+            <div class="data">
+                <dt class="heading">{{ 'Last Broken'|t('link-audit') }}</dt>
+                <dd class="value">{{ url.dateLastBroken ? url.dateLastBroken|datetime('short') : '-' }}</dd>
+            </div>
+            <div class="data">
+                <dt class="heading">{{ 'Failures in a Row'|t('link-audit') }}</dt>
+                <dd class="value">{{ url.failCount }}</dd>
+            </div>
+            {% if url.method or rawMessage %}
+                <details>
+                    <summary>{{ 'Technical Detail'|t('link-audit') }}</summary>
+                    {% if url.method %}
+                        <p>
+                            <span class="light">{{ 'Asked with'|t('link-audit') }}</span>
+                            {{ url.method|upper }}
+                        </p>
+                    {% endif %}
+                    {% if rawMessage %}
+                        <p style="word-break:break-all">
+                            <span class="light">{{ 'The message as it arrived'|t('link-audit') }}</span>
+                            {{ rawMessage }}
+                        </p>
+                    {% endif %}
+                </details>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if canRunScans or canManageIgnores %}
+        <div class="pane" style="margin-top:14px">
+            <h2>{{ 'Do something about it'|t('link-audit') }}</h2>
+
+            {% if isIgnored %}
+                <p class="light">
+                    {{ 'This one is being left alone. It is kept out of every list and never checked, until somebody puts it back.'|t('link-audit') }}
+                </p>
+
+                {% if canManageIgnores %}
+                    <form method="post" accept-charset="UTF-8" style="margin-top:10px">
+                        {{ csrfInput() }}
+                        {{ actionInput('link-audit/url-actions/restore') }}
+                        {{ redirectInput(returnUrl) }}
+                        {{ forms.hidden({ name: 'hash', value: url.urlHash }) }}
+                        <button type="submit" class="btn submit" data-link-audit-submit>
+                            <span class="label">{{ 'Restore'|t('link-audit') }}</span>
+                            <div class="spinner spinner-absolute"></div>
+                        </button>
+                    </form>
+                {% endif %}
+            {% else %}
+                {% if canManageIgnores %}
+                    <p class="light">
+                        {{ 'Ignoring keeps it off every list until somebody restores it. A note with the ignore is optional, and worth writing: the next person will want to know.'|t('link-audit') }}
+                    </p>
+                {% endif %}
+
+                <div class="flex" style="align-items:center;gap:14px;flex-wrap:wrap">
+                    {% if canRunScans %}
+                        <form method="post" accept-charset="UTF-8">
+                            {{ csrfInput() }}
+                            {{ actionInput('link-audit/url-actions/recheck') }}
+                            {{ redirectInput(returnUrl) }}
+                            {{ forms.hidden({ name: 'hash', value: url.urlHash }) }}
+                            <button type="submit" class="btn" data-link-audit-submit>
+                                <span class="label">{{ 'Check again'|t('link-audit') }}</span>
+                                <div class="spinner spinner-absolute"></div>
+                            </button>
+                        </form>
+                    {% endif %}
+
+                    {% if canManageIgnores %}
+                        <form method="post" accept-charset="UTF-8" class="flex" style="align-items:center;gap:8px">
+                            {{ csrfInput() }}
+                            {{ actionInput('link-audit/url-actions/ignore') }}
+                            {{ redirectInput(returnUrl) }}
+                            {{ forms.hidden({ name: 'hash', value: url.urlHash }) }}
+                            {{ forms.text({
+                                name: 'note',
+                                value: '',
+                                size: 40,
+                                placeholder: 'Why you are leaving it'|t('link-audit'),
+                                labelledBy: 'link-audit-ignore-note-label',
+                            }) }}
+                            <span id="link-audit-ignore-note-label" class="visually-hidden">{{ 'Why you are leaving it'|t('link-audit') }}</span>
+                            <button type="submit" class="btn" data-link-audit-submit>
+                                <span class="label">{{ 'Ignore this URL'|t('link-audit') }}</span>
+                                <div class="spinner spinner-absolute"></div>
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <div class="pane" style="margin-top:14px">
+        <h2>{{ 'Where it appears'|t('link-audit') }}</h2>
+
+        {% if referenceCount == 0 %}
+            <p class="light">{{ 'Nothing you can read points at this URL any more.'|t('link-audit') }}</p>
+        {% else %}
+            {% if referenceCount > referencesShown %}
+                <p class="light">
+                    {{ 'Showing the first {shown} of {total} places.'|t('link-audit', {
+                        shown: referencesShown,
+                        total: referenceCount,
+                    }) }}
+                </p>
+            {% endif %}
+
+            <table class="data fullwidth">
+                <thead>
+                    <tr>
+                        <th scope="col">{{ 'Page'|t('link-audit') }}</th>
+                        <th scope="col">{{ 'Type'|t('link-audit') }}</th>
+                        <th scope="col">{{ 'Site'|t('link-audit') }}</th>
+                        <th scope="col">{{ 'Field'|t('link-audit') }}</th>
+                        <th scope="col">{{ 'Link Text'|t('link-audit') }}</th>
+                        <th scope="col">{{ 'Came From'|t('link-audit') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for reference in references %}
+                        <tr>
+                            <td>
+                                {% if reference.editUrl %}
+                                    <a href="{{ reference.editUrl }}">{{ reference.element.uiLabel }}</a>
+                                {% elseif reference.element %}
+                                    {{ reference.element.uiLabel }}
+                                {% else %}
+                                    <span class="light">{{ 'Gone'|t('link-audit') }}</span>
+                                {% endif %}
+                                {% if reference.nested %}
+                                    <span class="light">{{ '(in a block)'|t('link-audit') }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ reference.elementType }}</td>
+                            <td>{{ reference.site ? reference.site.name|t('site') : '-' }}</td>
+                            <td>
+                                {% if reference.source == 'rendered' %}
+                                    <span class="light">{{ 'In the template, not a field'|t('link-audit') }}</span>
+                                {% else %}
+                                    {{ reference.fieldName ?? '-' }}
+                                {% endif %}
+                            </td>
+                            <td>{{ reference.linkText ?? '-' }}</td>
+                            <td>{{ sourceOptions[reference.source] ?? reference.source }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+    </div>
+
+    {% js %}
+    (function() {
+        'use strict';
+
+        // These post as ordinary forms, so the answer arrives as a fresh page
+        // with a flash on it. A recheck is one request made while somebody
+        // waits, though, and a slow host can hold it for the whole of the
+        // request timeout: without this the button sits there looking untouched
+        // and gets pressed again.
+        document.querySelectorAll('[data-link-audit-submit]').forEach(function(button) {
+            button.form.addEventListener('submit', function() {
+                button.classList.add('loading', 'disabled');
+                button.setAttribute('aria-busy', 'true');
+
+                // Left clickable until the navigation starts: disabling a submit
+                // button in its own submit handler stops the form submitting at
+                // all in some browsers.
+                window.setTimeout(function() {
+                    button.setAttribute('disabled', 'disabled');
+                }, 0);
+            });
+        });
+    })();
+    {% endjs %}
+{% endblock %}

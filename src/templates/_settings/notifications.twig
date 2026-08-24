@@ -1,0 +1,91 @@
+{% extends 'link-audit/_settings/layout' %}
+
+{% import '_includes/forms.twig' as forms %}
+
+{% block settingsFields %}
+    <div class="readable">
+        <blockquote class="note">
+            <p>
+                {{ 'A message goes out when a scan finishes and the count of broken links reaches the threshold below. Both channels are off until you turn them on, and neither of them can fail a scan: if the mail server or the webhook will not have it, that goes in the log and the scan finishes all the same.'|t('link-audit') }}
+            </p>
+        </blockquote>
+    </div>
+
+    {{ forms.lightswitchField({
+        label: 'Email Notifications'|t('link-audit'),
+        instructions: 'Send the report by email when a scan finishes.'|t('link-audit'),
+        id: 'notifyEmailEnabled',
+        name: 'settings[notifyEmailEnabled]',
+        on: settings.notifyEmailEnabled,
+        errors: settings.getErrors('notifyEmailEnabled'),
+        warning: config.notifyEmailEnabled is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.notifyEmailEnabled is defined,
+    }) }}
+
+    {{ forms.autosuggestField({
+        label: 'Email Recipients'|t('link-audit'),
+        instructions: 'Who hears about it. Separate several addresses with commas. You can reference an environment variable, which is the handier way to send staging reports somewhere other than production: type $ to see what is available.'|t('link-audit'),
+        id: 'notifyEmailRecipients',
+        name: 'settings[notifyEmailRecipients]',
+        value: settings.notifyEmailRecipients,
+        suggestEnvVars: true,
+        suggestAliases: false,
+        placeholder: 'you@example.com, someone@example.com',
+        errors: settings.getErrors('notifyEmailRecipients'),
+        warning: config.notifyEmailRecipients is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.notifyEmailRecipients is defined,
+    }) }}
+
+    <hr>
+
+    {{ forms.lightswitchField({
+        label: 'Slack Notifications'|t('link-audit'),
+        instructions: 'Post the same report to a Slack channel.'|t('link-audit'),
+        id: 'notifySlackEnabled',
+        name: 'settings[notifySlackEnabled]',
+        on: settings.notifySlackEnabled,
+        errors: settings.getErrors('notifySlackEnabled'),
+        warning: config.notifySlackEnabled is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.notifySlackEnabled is defined,
+    }) }}
+
+    {{ forms.autosuggestField({
+        label: 'Slack Webhook URL'|t('link-audit'),
+        instructions: 'The incoming webhook URL from your Slack app. Anybody holding this URL can post into your channel, so keep it in an environment variable rather than typing it in here: settings are stored in project config, which is committed. Type $ to see what is available.'|t('link-audit'),
+        id: 'notifySlackWebhookUrl',
+        name: 'settings[notifySlackWebhookUrl]',
+        value: settings.notifySlackWebhookUrl,
+        suggestEnvVars: true,
+        suggestAliases: false,
+        placeholder: '$LINK_AUDIT_SLACK_WEBHOOK',
+        errors: settings.getErrors('notifySlackWebhookUrl'),
+        warning: config.notifySlackWebhookUrl is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.notifySlackWebhookUrl is defined,
+    }) }}
+
+    <hr>
+
+    {{ forms.lightswitchField({
+        label: 'Only Count What This Scan Found'|t('link-audit'),
+        instructions: 'On, a message counts the links this scan itself found broken. Off, it counts everything on the site that is still broken, which means the same links come round again after every scan.'|t('link-audit'),
+        id: 'notifyOnNewBroken',
+        name: 'settings[notifyOnNewBroken]',
+        on: settings.notifyOnNewBroken,
+        errors: settings.getErrors('notifyOnNewBroken'),
+        warning: config.notifyOnNewBroken is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.notifyOnNewBroken is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Send Once Broken Links Reach'|t('link-audit'),
+        instructions: 'How many broken links have to be counted before anything is sent. Leave it at one to hear about every breakage, or raise it on a site where the odd broken link is not worth an email.'|t('link-audit'),
+        id: 'notifyBrokenThreshold',
+        name: 'settings[notifyBrokenThreshold]',
+        value: settings.notifyBrokenThreshold,
+        type: 'number',
+        min: 1,
+        errors: settings.getErrors('notifyBrokenThreshold'),
+        warning: config.notifyBrokenThreshold is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.notifyBrokenThreshold is defined,
+    }) }}
+{% endblock %}

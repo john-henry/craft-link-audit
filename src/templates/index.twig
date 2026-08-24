@@ -1,0 +1,468 @@
+{% extends '_layouts/cp' %}
+
+{% import '_includes/forms.twig' as forms %}
+
+{% set title = 'Link Audit'|t('link-audit') %}
+{% set selectedSubnavItem = 'overview' %}
+{% set crumbs = [
+    { label: 'Link Audit'|t('link-audit'), url: cpUrl('link-audit') },
+    { label: 'Overview'|t('link-audit') },
+] %}
+
+{% if sites|length > 1 %}
+    {% set crumbs = [{
+        id: 'site-crumb',
+        icon: 'world',
+        label: site.name|t('site'),
+        menu: { items: siteMenuItems(sites, site), label: 'Select site'|t('app') },
+    }]|merge(crumbs) %}
+{% endif %}
+
+{% set tiles = [
+    {
+        label: 'Broken'|t('link-audit'),
+        total: counts.broken,
+        colour: 'red',
+        url: cpUrl('link-audit/broken', { site: siteHandle }),
+    },
+    {
+        label: 'Permanent Redirects'|t('link-audit'),
+        total: counts.permanentRedirect,
+        colour: 'blue',
+        url: cpUrl('link-audit/redirects', { site: siteHandle, permanent: '1' }),
+        info: 'The pages these links point at have moved for good, and your content still carries the old addresses. The links still work, but they are worth updating.'|t('link-audit'),
+    },
+    {
+        label: 'Unverifiable'|t('link-audit'),
+        total: counts.blocked,
+        colour: 'yellow',
+        url: cpUrl('link-audit/blocked', { site: siteHandle }),
+        info: 'These refused an automated check. LinkedIn and sites behind Cloudflare are the usual ones. They are most likely grand in a real browser, so they are never counted as broken.'|t('link-audit'),
+    },
+    {
+        label: 'No Answer'|t('link-audit'),
+        total: counts.unreachable,
+        colour: 'orange',
+        url: cpUrl('link-audit/no-answer', { site: siteHandle }),
+        info: 'These did not answer when last checked: a server that was down, or an address that would not resolve. They are retried on their own, and one that keeps failing is called Broken after a few failures in a row.'|t('link-audit'),
+    },
+    {
+        label: 'Working'|t('link-audit'),
+        total: counts.ok,
+        colour: 'green',
+        url: null,
+    },
+] %}
+
+{% block actionButton %}
+    {% if canRunScans %}
+        <form method="post" accept-charset="UTF-8" class="flex" id="link-audit-scan-actions">
+            {{ csrfInput() }}
+            {{ actionInput('link-audit/scans/start') }}
+            {{ redirectInput('link-audit?site=' ~ siteHandle) }}
+            {{ forms.hidden({ name: 'siteId', value: siteId }) }}
+            <button type="submit" class="btn" name="mode" value="incremental">
+                <span class="label">{{ 'Scan what changed'|t('link-audit') }}</span>
+                <div class="spinner spinner-absolute"></div>
+            </button>
+            <button type="submit" class="btn submit" name="mode" value="full">
+                <span class="label">{{ 'Run full scan'|t('link-audit') }}</span>
+                <div class="spinner spinner-absolute"></div>
+            </button>
+        </form>
+
+        {% js %}
+        (function() {
+            'use strict';
+
+            var form = document.getElementById('link-audit-scan-actions');
+
+            if (!form) {
+                return;
+            }
+
+            var busy = false;
+
+            // The clicked button spins rather than being disabled: disabling it
+            // before the request leaves would drop its name and value out of
+            // the POST, and the mode travels on the button.
+            form.addEventListener('submit', function(event) {
+                if (busy) {
+                    event.preventDefault();
+
+                    return;
+                }
+
+                busy = true;
+
+                if (event.submitter) {
+                    event.submitter.classList.add('loading');
+                    event.submitter.setAttribute('aria-busy', 'true');
+                }
+            });
+        })();
+        {% endjs %}
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+    {% if runningScan %}
+        {% css %}
+        #link-audit-progress td[data-progress] { font-variant-numeric: tabular-nums; }
+        #link-audit-progress th[scope="row"] { width: 220px; }
+        #content #link-audit-progress,
+        #link-audit-progress {
+            --pane-bg: var(--notice-background);
+            --pane-border: 1px solid var(--notice-border-color);
+            --secondary-pane-bg: var(--notice-background);
+            background-color: var(--notice-background);
+            border: 1px solid var(--notice-border-color);
+            border-inline-start: 4px solid var(--notice-color);
+        }
+        #link-audit-progress h2 { display: flex; align-items: center; gap: 10px; }
+        {% endcss %}
+        <div class="pane" id="link-audit-progress">
+            <h2>
+                {{ 'A scan is running'|t('link-audit') }}
+                <span class="spinner" aria-hidden="true"></span>
+            </h2>
+            <p class="light">
+                {{ 'It works through the content first, then the URLs. The counts below update as it goes.'|t('link-audit') }}
+            </p>
+            <table class="data fullwidth">
+                <tbody aria-live="polite">
+                    <tr>
+                        <th scope="row">{{ 'Stage'|t('link-audit') }}</th>
+                        <td data-progress="statusLabel">{{ runningScanStatus }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">{{ 'Content Items Read'|t('link-audit') }}</th>
+                        <td data-progress="elementsScanned">{{ runningScan.elementsScanned }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">{{ 'URLs Checked'|t('link-audit') }}</th>
+                        <td data-progress="urlsChecked">{{ runningScan.urlsChecked }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">{{ 'Broken So Far'|t('link-audit') }}</th>
+                        <td data-progress="urlsBroken">{{ runningScan.urlsBroken }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        {% js %}
+        (function() {
+            'use strict';
+
+            var container = document.getElementById('link-audit-progress');
+
+            if (!container) {
+                return;
+            }
+
+            var endpoint = '{{ actionUrl('link-audit/scans/status')|e('js') }}';
+
+            function paint(scan) {
+                Object.keys(scan).forEach(function(key) {
+                    var cell = container.querySelector('[data-progress="' + key + '"]');
+
+                    if (cell) {
+                        cell.textContent = scan[key];
+                    }
+                });
+            }
+
+            function poll() {
+                fetch(endpoint, {
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
+                }).then(function(response) {
+                    return response.json();
+                }).then(function(data) {
+                    if (!data || !data.scan) {
+                        window.location.reload();
+
+                        return;
+                    }
+
+                    paint(data.scan);
+                    window.setTimeout(poll, 5000);
+                }).catch(function() {
+                    // A failed poll is not worth an error notice: the scan is
+                    // running in a worker either way, and the next tick may well
+                    // answer. Give it a longer gap and try again.
+                    window.setTimeout(poll, 15000);
+                });
+            }
+
+            window.setTimeout(poll, 5000);
+        })();
+        {% endjs %}
+    {% endif %}
+
+    {% if latestScan is null and not runningScan %}
+        <div class="zilch">
+            <p>{{ 'Nothing has been scanned yet. Run a scan and every link in your content gets pulled out, checked once, and reported here.'|t('link-audit') }}</p>
+        </div>
+    {% else %}
+        {% css %}
+        .link-audit-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+        .link-audit-tiles .info { width: 1.25em; }
+        .link-audit-tile {
+            position: relative;
+            background: var(--pane-bg, var(--white));
+            border: 1px solid var(--border-hairline);
+            border-radius: var(--large-border-radius);
+        }
+        .link-audit-tile > a, .link-audit-tile > .link-audit-tile-body { display: block; padding: var(--m) var(--l); }
+        .link-audit-tile--linked:hover { border-color: var(--dark-hairline-color); }
+        .link-audit-tile > a:hover { text-decoration: none; }
+        .link-audit-tile-count { font-size: 28px; font-weight: 600; line-height: 1.3; font-variant-numeric: tabular-nums; }
+        .link-audit-tile-count--red { color: var(--red-600); }
+        .link-audit-tile-count--blue { color: var(--blue-600); }
+        .link-audit-tile-count--yellow { color: var(--amber-600); }
+        .link-audit-tile-count--orange { color: var(--orange-600); }
+        .link-audit-tile-count--green { color: var(--teal-600); }
+        .link-audit-tile > .info,
+        .link-audit-tile > .infoicon-container { position: absolute; top: var(--m); inset-inline-end: var(--m); }
+        #link-audit-last-scan th[scope="row"] { width: 220px; }
+        #link-audit-worst { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; margin-block: 14px; }
+        #link-audit-worst > .pane { margin-block: 0; }
+        @media (max-width: 900px) { #link-audit-worst { grid-template-columns: 1fr; } }
+        #link-audit-worst td.rightalign, #link-audit-last-scan td { font-variant-numeric: tabular-nums; }
+        {% endcss %}
+        <div class="link-audit-tiles">
+            {% for tile in tiles %}
+                {% set tileInner %}
+                    <div class="link-audit-tile-count link-audit-tile-count--{{ tile.colour }}">{{ tile.total }}</div>
+                    <div class="light">{{ tile.label }}</div>
+                {% endset %}
+                <div class="link-audit-tile {{ tile.url ? 'link-audit-tile--linked' }}">
+                    {% if tile.url %}
+                        <a href="{{ tile.url }}">{{ tileInner }}</a>
+                    {% else %}
+                        <div class="link-audit-tile-body">{{ tileInner }}</div>
+                    {% endif %}
+                    {% if tile.info is defined and tile.info %}
+                        <span class="info">{{ tile.info }}</span>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+
+        {% if latestScan %}
+            <div class="pane" id="link-audit-last-scan">
+                <h2>{{ 'Last scan'|t('link-audit') }}</h2>
+                <table class="data fullwidth">
+                    <tbody>
+                        <tr>
+                            <th scope="row">{{ 'Finished'|t('link-audit') }}</th>
+                            <td>
+                                {% if latestScan.dateFinished %}
+                                    {{ latestScan.dateFinished|datetime('short') }}
+                                {% else %}
+                                    {{ 'Unknown'|t('link-audit') }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">{{ 'Kind'|t('link-audit') }}</th>
+                            <td>{{ latestScanMode }}</td>
+                        </tr>
+                        <tr>
+                            <th scope="row">{{ 'Took'|t('link-audit') }}</th>
+                            <td>
+                                {% if latestScan.durationSeconds is not null %}
+                                    {{ latestScan.durationSeconds|duration }}
+                                {% else %}
+                                    {{ 'Unknown'|t('link-audit') }}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row">{{ 'Content Items Read'|t('link-audit') }}</th>
+                            <td>{{ latestScan.elementsScanned }}</td>
+                        </tr>
+                        <tr>
+                            <th scope="row">{{ 'URLs Checked'|t('link-audit') }}</th>
+                            <td>{{ latestScan.urlsChecked }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+        <div id="link-audit-worst">
+            <div class="pane">
+                <h2>{{ 'Hosts giving the most trouble'|t('link-audit') }}</h2>
+                {% if topHosts|length %}
+                    <table class="data fullwidth">
+                        <thead>
+                            <tr>
+                                <th scope="col">{{ 'Host'|t('link-audit') }}</th>
+                                <th scope="col" class="rightalign">{{ 'Broken Links'|t('link-audit') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for host in topHosts %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ cpUrl('link-audit/broken', { site: siteHandle, host: host.host }) }}" translate="no">
+                                            {{ host.host }}
+                                        </a>
+                                    </td>
+                                    <td class="rightalign">{{ host.total }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="light">{{ 'Nothing broken on this site, so no host is to blame.'|t('link-audit') }}</p>
+                {% endif %}
+            </div>
+
+            <div class="pane">
+                <h2>{{ 'Pages carrying the most broken links'|t('link-audit') }}</h2>
+                {% if topPages|length %}
+                    <table class="data fullwidth">
+                        <thead>
+                            <tr>
+                                <th scope="col">{{ 'Page'|t('link-audit') }}</th>
+                                <th scope="col" class="rightalign">{{ 'Broken Links'|t('link-audit') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for page in topPages %}
+                                <tr>
+                                    <td>
+                                        {% if page.element %}
+                                            {% set editUrl = page.element.getCpEditUrl() %}
+                                            {% if editUrl %}
+                                                <a href="{{ editUrl }}">{{ page.element.uiLabel }}</a>
+                                            {% else %}
+                                                {{ page.element.uiLabel }}
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="light">{{ 'Gone'|t('link-audit') }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="rightalign">{{ page.total }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p class="light">{{ 'No page on this site is carrying a broken link.'|t('link-audit') }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+    {% endif %}
+
+    {% do view.registerAssetBundle('johnhenry\\linkaudit\\assets\\tour\\TourAsset') %}
+
+    {% js at head %}
+    window.LinkAuditTour = {{ {
+        autoStart: tourAutoStart,
+        seenUrl: tourSeenUrl,
+        steps: tourSteps,
+    }|json_encode|raw }};
+    {% endjs %}
+
+    <p style="margin-top:14px">
+        <button type="button" id="link-audit-tour-start" class="btn small light">
+            {{ 'Take the tour'|t('link-audit') }}
+        </button>
+    </p>
+
+    {% js %}
+    (function() {
+        'use strict';
+
+        var config = window.LinkAuditTour;
+        var trigger = document.getElementById('link-audit-tour-start');
+
+        if (!config || !trigger || !window.driver || !window.driver.js) {
+            return;
+        }
+
+        // What is on this page depends on the state of the install: a site that
+        // has never been scanned has no Last scan pane and no tables under it,
+        // and a reader on a narrow screen has the navigation folded away. A step
+        // pointing at nothing draws an empty box in the corner of the screen, so
+        // the steps are cut down to what is really here before the tour opens.
+        // Cut here rather than skipped as they come round, so the progress count
+        // is the number of stops the reader is actually going to make.
+        var steps = config.steps.filter(function(step) {
+            var element = document.querySelector(step.selector);
+
+            return element !== null && element.getClientRects().length > 0;
+        }).map(function(step) {
+            return {
+                element: step.selector,
+                popover: {
+                    title: step.title,
+                    description: step.text,
+                },
+            };
+        });
+
+        if (!steps.length) {
+            trigger.parentNode.removeChild(trigger);
+
+            return;
+        }
+
+        // A reader who has already been told has nothing left to record, so
+        // taking the tour again costs no request at all.
+        var seen = !config.autoStart;
+
+        function markSeen() {
+            if (seen) {
+                return;
+            }
+
+            seen = true;
+
+            var body = new FormData();
+            body.append(window.Craft.csrfTokenName || window.csrfTokenName, window.Craft.csrfTokenValue || window.csrfTokenValue);
+
+            // Nothing is said out loud either way. Somebody who has just closed
+            // a tour does not want a notice about it, and a preference that
+            // failed to save costs them the tour a second time and nothing else.
+            fetch(config.seenUrl, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+                body: body,
+            }).catch(function() {});
+        }
+
+        var tour = window.driver.js.driver({
+            steps: steps,
+            showProgress: true,
+            // Somebody who has asked their machine for less motion gets the
+            // popovers without the sliding.
+            animate: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+            // Belt and braces on top of the filter above: an element that goes
+            // while the tour is open takes its step with it rather than the tour.
+            skipMissingElement: true,
+            nextBtnText: Craft.t('link-audit', 'Next'),
+            prevBtnText: Craft.t('link-audit', 'Back'),
+            doneBtnText: Craft.t('link-audit', 'Done'),
+            // Finished and closed count the same. A tour that keeps coming back
+            // until somebody sits through the whole of it is worse than none.
+            onDestroyed: markSeen,
+        });
+
+        trigger.addEventListener('click', function(event) {
+            event.preventDefault();
+            tour.drive();
+        });
+
+        if (config.autoStart) {
+            tour.drive();
+        }
+    })();
+    {% endjs %}
+{% endblock %}

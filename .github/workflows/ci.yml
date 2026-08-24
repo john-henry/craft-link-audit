@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [craft-5-develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: johnhenry-ie/.github/.github/workflows/ci.yml@main
+    with:
+      craft_version: "5"
+      jobs: '["ecs","phpstan"]'
+    secrets:
+      token: ${{ secrets.GITHUB_TOKEN }}
