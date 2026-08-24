@@ -1,0 +1,401 @@
+{% import '_includes/forms.twig' as forms %}
+
+{% if total == 0 %}
+    <div class="zilch">
+        <p>{{ emptyMessage }}</p>
+    </div>
+{% else %}
+    {% do view.registerAssetBundle('craft\\web\\assets\\admintable\\AdminTableAsset') %}
+
+    <form method="get" id="link-audit-filters" class="pane" style="margin-bottom:14px">
+        {{ forms.hidden({ name: 'site', value: siteHandle }) }}
+        <div class="flex" style="flex-wrap:wrap;align-items:flex-end;gap:14px">
+            {{ forms.selectField({
+                label: 'Host'|t('link-audit'),
+                name: 'host',
+                value: filters.host,
+                options: { '': 'Any host'|t('link-audit') }|merge(hostOptions),
+            }) }}
+
+            {{ forms.selectField({
+                label: 'Found In'|t('link-audit'),
+                name: 'elementType',
+                value: filters.elementType,
+                options: { '': 'Anything'|t('link-audit') }|merge(elementTypeOptions),
+            }) }}
+
+            {{ forms.selectField({
+                label: 'Came From'|t('link-audit'),
+                name: 'source',
+                value: filters.source,
+                options: { '': 'Anywhere'|t('link-audit') }|merge(sourceOptions),
+            }) }}
+
+            {% if verdict == 'redirect' %}
+                {{ forms.selectField({
+                    label: 'Kind'|t('link-audit'),
+                    name: 'permanent',
+                    value: filters.permanent,
+                    options: {
+                        '': 'Permanent and temporary'|t('link-audit'),
+                        '1': 'Permanent only'|t('link-audit'),
+                        '0': 'Temporary only'|t('link-audit'),
+                    },
+                }) }}
+            {% endif %}
+
+            <div class="field">
+                <button type="submit" class="btn">{{ 'Apply'|t('link-audit') }}</button>
+            </div>
+
+            {% set exportParams = {
+                verdict: verdict,
+                siteId: siteId,
+                host: filters.host,
+                elementType: filters.elementType,
+                source: filters.source,
+                permanent: filters.permanent,
+            }|filter(value => value is not null and value != '') %}
+
+            <div class="field">
+                <a class="btn" data-icon="download"
+                   href="{{ actionUrl('link-audit/export/csv', exportParams) }}">
+                    {{ 'Download CSV'|t('link-audit') }}
+                </a>
+            </div>
+        </div>
+    </form>
+
+    {% css %}
+    #link-audit-table-wrap table.data tbody td { padding-block: var(--m); }
+    #link-audit-table-wrap .link-audit-cell { display: flex; align-items: center; gap: var(--s); flex-wrap: wrap; }
+    .link-audit-code { display: inline-block; padding: 1px 7px; border-radius: var(--radius-md); font-size: 12px; font-weight: 600; }
+    .link-audit-code-pair { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .link-audit-code--2xx { background: var(--bg-success); color: var(--fg-success); }
+    .link-audit-code--3xx { background: var(--bg-notice); color: var(--fg-notice); }
+    .link-audit-code--4xx { background: var(--bg-error); color: var(--fg-error); }
+    .link-audit-code--5xx { background: var(--bg-warning); color: var(--fg-warning); }
+    .link-audit-code-arrow { padding-inline: 4px; }
+    #link-audit-table-wrap .link-audit-cell .btn { flex: none; }
+    #link-audit-table-wrap .link-audit-cell > a:first-child,
+    #link-audit-table-wrap .link-audit-cell > span[title] {
+        min-width: 16ch;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+    }
+    {% endcss %}
+
+    <div id="link-audit-table-wrap">
+        <div id="link-audit-table"></div>
+    </div>
+
+    {% js %}
+    (function() {
+        'use strict';
+
+        // Vue replaces the mount element with its own rendered DOM, so click
+        // listeners must sit on this outer wrapper, which Vue never touches.
+        // Listening on the mount element itself leaves the listeners on a
+        // detached node and every button on the table plays dead.
+        var container = document.getElementById('link-audit-table-wrap');
+        var isRedirects = {{ (verdict == 'redirect') ? 'true' : 'false' }};
+        var canAct = {{ (canRecheck or canIgnore) ? 'true' : 'false' }};
+        var endpoints = {
+            recheck: '{{ actionUrl('link-audit/url-actions/recheck')|e('js') }}',
+            ignore: '{{ actionUrl('link-audit/url-actions/ignore')|e('js') }}',
+        };
+
+        var params = {{ {
+            verdict: verdict,
+            siteId: siteId,
+            host: filters.host,
+            elementType: filters.elementType,
+            source: filters.source,
+            permanent: filters.permanent,
+        }|json_encode|raw }};
+
+        var query = Object.keys(params).filter(function(key) {
+            return params[key] !== '' && params[key] !== null;
+        }).map(function(key) {
+            return encodeURIComponent(key) + '=' + encodeURIComponent(params[key]);
+        }).join('&');
+
+        function truncate(value) {
+            return value.length > 70 ? value.substring(0, 69) + '…' : value;
+        }
+
+        function urlCell(value) {
+            if (!value) {
+                return '';
+            }
+
+            var copyLabel = Craft.escapeHtml(Craft.t('link-audit', 'Copy this URL'));
+            var openLabel = Craft.escapeHtml(Craft.t('link-audit', 'Open in a new tab'));
+
+            // The icon controls carry their label on `aria-label` and hold no
+            // child nodes, which is how Craft's own copytext button is built.
+            // A button with a hidden span inside is not `:empty`, so Craft gives
+            // its icon the 5px trailing margin meant to separate an icon from
+            // its text, and an icon-only button comes out lopsided.
+            var html = '<span class="link-audit-cell">'
+                + '<a href="' + Craft.escapeHtml(value.detailUrl) + '" title="' + Craft.escapeHtml(value.full) + '">'
+                + Craft.escapeHtml(truncate(value.full)) + '</a>';
+
+            // A stand-in row for an element link holds an internal marker, not
+            // an address, so there is nothing worth copying from it.
+            if (value.copyable) {
+                html += '<button type="button" class="btn small" data-icon="clipboard"'
+                    + ' data-link-audit-copy="' + Craft.escapeHtml(value.full) + '"'
+                    + ' title="' + copyLabel + '" aria-label="' + copyLabel + '"></button>';
+            }
+
+            // The stored address becomes a live href here, and a URL the plugin
+            // never checks is stored exactly as somebody typed it. Only the
+            // schemes the checker follows are handed out as a link; the rest
+            // keep the detail link and the copy button and nothing else.
+            if (value.openable) {
+                html += '<a href="' + Craft.escapeHtml(value.full) + '" target="_blank" rel="noopener noreferrer"'
+                    + ' data-icon="external" title="' + openLabel + '" aria-label="' + openLabel + '"></a>';
+            }
+
+            return html + '</span>';
+        }
+
+        // The class of a response code is what an editor reads off the colour:
+        // green answered fine, blue moved, red refused, amber went wrong at
+        // the server's end. Anything nonstandard lands in amber too.
+        function codeBadge(code, title) {
+            var kind = code < 300 ? '2xx' : (code < 400 ? '3xx' : (code < 500 ? '4xx' : '5xx'));
+            var hover = title ? ' title="' + Craft.escapeHtml(title) + '"' : '';
+
+            return '<span class="link-audit-code link-audit-code--' + kind + '"' + hover + '>' + code + '</span>';
+        }
+
+        // A redirect is followed to wherever it lands, so the code on the row is
+        // the last hop's and reads as a plain green 200 with nothing saying the
+        // link moved at all. Where the first hop's own code was recorded, both
+        // are drawn: what the address answered, then where it ended up. A row
+        // checked before that code was kept carries none, and reads as it
+        // always did until its next check.
+        function codeCell(value) {
+            if (!value || !value.status) {
+                return '';
+            }
+
+            if (!value.redirectStatus) {
+                return codeBadge(value.status, value.statusTitle);
+            }
+
+            // The pair is one fact. Wrapped apart it reads as two codes.
+            return '<span class="link-audit-code-pair">'
+                + codeBadge(value.redirectStatus, value.redirectTitle)
+                + '<span class="light link-audit-code-arrow">&rarr;</span>'
+                + codeBadge(value.status, value.statusTitle)
+                + '</span>';
+        }
+
+        function redirectCell(value) {
+            if (!value || !value.finalUrl) {
+                return '';
+            }
+
+            var label = value.permanent
+                ? Craft.t('link-audit', 'Permanent')
+                : Craft.t('link-audit', 'Temporary');
+            var copyNewLabel = Craft.escapeHtml(Craft.t('link-audit', 'Copy the new address'));
+
+            // The screen's own advice is to put this address into the content,
+            // so the column hands it over ready to paste.
+            return '<span class="link-audit-cell">'
+                + '<span class="status ' + (value.permanent ? 'blue' : 'light') + '"></span>'
+                + '<span title="' + Craft.escapeHtml(value.finalUrl) + '">'
+                + Craft.escapeHtml(truncate(value.finalUrl)) + '</span>'
+                + '<button type="button" class="btn small" data-icon="clipboard"'
+                + ' data-link-audit-copy="' + Craft.escapeHtml(value.finalUrl) + '"'
+                + ' title="' + copyNewLabel + '" aria-label="' + copyNewLabel + '"></button>'
+                + '<span class="light">(' + Craft.escapeHtml(label) + ')</span></span>';
+        }
+
+        // The label goes in its own span and the spinner sits alongside it,
+        // which is the shape Craft's own submit buttons use: adding `loading`
+        // to the button hides the label and shows the spinner in its place.
+        function actionButton(action, hash, label) {
+            return '<button type="button" class="btn small" data-link-audit-action="' + action + '"'
+                + ' data-link-audit-hash="' + hash + '">'
+                + '<span class="label">' + Craft.escapeHtml(label) + '</span>'
+                + '<div class="spinner spinner-absolute"></div>'
+                + '</button>';
+        }
+
+        function actionsCell(value) {
+            if (!value) {
+                return '';
+            }
+
+            var hash = Craft.escapeHtml(value.hash);
+            var html = '<span class="link-audit-cell">';
+
+            if (value.recheck) {
+                html += actionButton('recheck', hash, Craft.t('link-audit', 'Check again'));
+            }
+
+            if (value.ignore) {
+                html += actionButton('ignore', hash, Craft.t('link-audit', 'Ignore'));
+            }
+
+            return html + '</span>';
+        }
+
+        // No Verdict column: each of these screens holds exactly one verdict,
+        // and the page has already said which in its title and its opening
+        // sentence. A column repeating the same word down every row is noise.
+        var columns = [
+            { name: 'url', title: Craft.t('link-audit', 'URL'), callback: urlCell, sortField: true },
+            {
+                name: 'code',
+                title: Craft.t('link-audit', 'Code'),
+                callback: codeCell,
+                sortField: true,
+                titleClass: 'centeralign',
+                dataClass: 'centeralign',
+            },
+            { name: 'host', title: Craft.t('link-audit', 'Host'), sortField: true },
+        ];
+
+        if (isRedirects) {
+            columns.push({ name: 'redirect', title: Craft.t('link-audit', 'Goes To'), callback: redirectCell });
+        }
+
+        columns.push(
+            {
+                name: 'refs',
+                title: Craft.t('link-audit', 'Places'),
+                sortField: true,
+                titleClass: 'rightalign',
+                dataClass: 'rightalign',
+            },
+            { name: 'checked', title: Craft.t('link-audit', 'Last Checked'), sortField: true }
+        );
+
+        if (canAct) {
+            columns.push({ name: 'actions', title: Craft.t('link-audit', 'Do something'), callback: actionsCell });
+        }
+
+        // A filtered page that comes back empty is not the same story as a
+        // site with nothing to report, and saying "nothing broken" while two
+        // broken links sit outside the filter is a lie the reader acts on.
+        var filtered = ['host', 'elementType', 'source', 'permanent'].some(function(key) {
+            return params[key] !== '' && params[key] !== null && params[key] !== undefined;
+        });
+
+        var table = new Craft.VueAdminTable({
+            columns: columns,
+            container: '#link-audit-table',
+            checkboxes: false,
+            padded: true,
+            search: true,
+            searchPlaceholder: Craft.t('link-audit', 'Search these URLs'),
+            perPage: {{ perPage }},
+            emptyMessage: filtered
+                ? Craft.t('link-audit', 'Nothing matches those filters. Loosen them and the rest comes back.')
+                : {{ emptyMessage|json_encode|raw }},
+            tableDataEndpoint: 'link-audit/urls/table?' + query,
+        });
+
+        container.addEventListener('click', function(event) {
+            var button = event.target.closest('[data-link-audit-copy]');
+
+            if (!button || !navigator.clipboard) {
+                return;
+            }
+
+            event.preventDefault();
+            navigator.clipboard.writeText(button.getAttribute('data-link-audit-copy')).then(function() {
+                Craft.cp.displayNotice(Craft.t('link-audit', 'URL copied.'));
+            });
+        });
+
+        function setBusy(button, busy) {
+            button.classList.toggle('loading', busy);
+            button.classList.toggle('disabled', busy);
+
+            if (busy) {
+                button.setAttribute('disabled', 'disabled');
+                button.setAttribute('aria-busy', 'true');
+
+                return;
+            }
+
+            button.removeAttribute('disabled');
+            button.removeAttribute('aria-busy');
+        }
+
+        // A recheck is one request made while somebody waits, and a slow host
+        // can hold it for the whole of the request timeout. What comes back is
+        // worth saying out loud, code and all.
+        function outcomeOf(data) {
+            if (!data.verdict) {
+                return data.message;
+            }
+
+            if (data.verdict.httpStatus) {
+                return Craft.t('link-audit', 'Checked: {verdict} ({code}).', {
+                    verdict: data.verdict.label,
+                    code: data.verdict.httpStatus,
+                });
+            }
+
+            return Craft.t('link-audit', 'Checked: {verdict}.', { verdict: data.verdict.label });
+        }
+
+        container.addEventListener('click', function(event) {
+            var button = event.target.closest('[data-link-audit-action]');
+
+            if (!button || button.hasAttribute('disabled')) {
+                return;
+            }
+
+            event.preventDefault();
+
+            var action = button.getAttribute('data-link-audit-action');
+            var body = new FormData();
+            body.append(window.Craft.csrfTokenName || window.csrfTokenName, window.Craft.csrfTokenValue || window.csrfTokenValue);
+            body.append('hash', button.getAttribute('data-link-audit-hash'));
+
+            setBusy(button, true);
+
+            fetch(endpoints[action], {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+                body: body,
+            }).then(function(response) {
+                return response.json().catch(function() {
+                    return { success: false };
+                });
+            }).then(function(data) {
+                setBusy(button, false);
+
+                if (!data || !data.success) {
+                    Craft.cp.displayError((data && data.error) || Craft.t('link-audit', 'That did not work. Try again.'));
+
+                    return;
+                }
+
+                Craft.cp.displayNotice(outcomeOf(data));
+
+                // The row's verdict has moved, and this list only holds the one
+                // verdict, so the row itself may no longer belong here. The
+                // table is asked for its page again rather than the browser
+                // being sent round the houses: a full reload throws away the
+                // notice that has just been put on screen, and the button then
+                // reads as having done nothing at all.
+                table.reload();
+            }).catch(function() {
+                setBusy(button, false);
+                Craft.cp.displayError(Craft.t('link-audit', 'That did not work. Try again.'));
+            });
+        });
+    })();
+    {% endjs %}
+{% endif %}

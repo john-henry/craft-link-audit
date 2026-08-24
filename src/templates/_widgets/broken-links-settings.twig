@@ -1,0 +1,15 @@
+{% import '_includes/forms.twig' as forms %}
+
+{% set options = [{ label: 'All sites'|t('link-audit'), value: '' }] %}
+{% for site in sites %}
+    {% set options = options|merge([{ label: site.name|t('site'), value: site.id }]) %}
+{% endfor %}
+
+{{ forms.selectField({
+    label: 'Site'|t('link-audit'),
+    instructions: 'Which site the counts cover. Pick one to match what its Overview page shows.'|t('link-audit'),
+    id: 'siteId',
+    name: 'siteId',
+    value: siteId,
+    options: options,
+}) }}

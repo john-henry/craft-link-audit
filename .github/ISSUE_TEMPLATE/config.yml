@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://johnhenry.ie/plugins/link-audit/
+    about: Read the official documentation.

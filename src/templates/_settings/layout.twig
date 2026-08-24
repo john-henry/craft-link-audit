@@ -1,0 +1,50 @@
+{% extends '_layouts/cp' %}
+
+{% set readOnly = readOnly ?? false %}
+{% set fullPageForm = not readOnly %}
+{% set selectedSubnavItem = 'settings' %}
+
+{% set tabLabels = {
+    scanning: 'Scanning'|t('link-audit'),
+    http: 'HTTP'|t('link-audit'),
+    caching: 'Caching and retention'|t('link-audit'),
+    ignores: 'Ignore rules'|t('link-audit'),
+    notifications: 'Notifications'|t('link-audit'),
+    schedule: 'Schedule'|t('link-audit'),
+} %}
+
+{% set title = 'Settings'|t('link-audit') %}
+{% set docTitle = title ~ ' - ' ~ tabLabels[tab] %}
+
+{% set crumbs = [
+    { label: 'Link Audit'|t('link-audit'), url: cpUrl('link-audit') },
+    { label: 'Settings'|t('link-audit'), url: cpUrl('link-audit/settings') },
+    { label: tabLabels[tab] },
+] %}
+
+{% set tabs = {
+    scanning: { label: tabLabels.scanning, url: cpUrl('link-audit/settings/scanning') },
+    http: { label: tabLabels.http, url: cpUrl('link-audit/settings/http') },
+    caching: { label: tabLabels.caching, url: cpUrl('link-audit/settings/caching') },
+    ignores: { label: tabLabels.ignores, url: cpUrl('link-audit/settings/ignores') },
+    notifications: { label: tabLabels.notifications, url: cpUrl('link-audit/settings/notifications') },
+    schedule: { label: tabLabels.schedule, url: cpUrl('link-audit/settings/schedule') },
+} %}
+{% set selectedTab = tab %}
+
+{% block content %}
+    {% if readOnly %}
+        <div class="readable">
+            <blockquote class="note warning">
+                <p>
+                    {{ 'Administrative changes are turned off on this environment, so these settings can be read but not changed here. Edit them where changes are allowed, or set them in config/link-audit.php.'|t('link-audit') }}
+                </p>
+            </blockquote>
+        </div>
+    {% else %}
+        {{ actionInput('link-audit/settings/save-' ~ tab) }}
+        {{ redirectInput('link-audit/settings/' ~ tab) }}
+    {% endif %}
+
+    {% block settingsFields %}{% endblock %}
+{% endblock %}

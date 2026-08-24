@@ -1,0 +1,70 @@
+{% extends 'link-audit/_settings/layout' %}
+
+{% import '_includes/forms.twig' as forms %}
+
+{% block settingsFields %}
+    <div class="readable">
+        <blockquote class="note">
+            <p>
+                {{ 'These are policy, not decisions about one link. A rule written here is applied to everything that matches it, before and after, and it takes a URL out of the checking entirely. Dismissing a single broken link is a different thing, done from the lists themselves, and those dismissals are listed on the Ignored screen with the name and the date on them.'|t('link-audit') }}
+            </p>
+        </blockquote>
+    </div>
+
+    {{ forms.editableTableField({
+        label: 'Ignored URL Patterns'|t('link-audit'),
+        instructions: 'Each row is a regular expression tested against the whole URL. Anything that matches is never checked, and is reported as ignored rather than broken. Examples: <code>^https://staging\\.</code>, <code>/preview\\?</code>.'|t('link-audit'),
+        id: 'ignorePatterns',
+        name: 'settings[ignorePatterns]',
+        cols: {
+            enabled: { type: 'lightswitch', heading: 'On'|t('link-audit'), thin: true },
+            pattern: { type: 'singleline', heading: 'URL Pattern'|t('link-audit'), code: true },
+            note: { type: 'singleline', heading: 'Note'|t('link-audit') },
+        },
+        rows: settings.ignorePatterns,
+        addRowLabel: 'Add a pattern'|t('link-audit'),
+        warning: config.ignorePatterns is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        allowAdd: not (readOnly or config.ignorePatterns is defined),
+        allowDelete: not (readOnly or config.ignorePatterns is defined),
+        allowReorder: not (readOnly or config.ignorePatterns is defined),
+        static: readOnly or config.ignorePatterns is defined,
+    }) }}
+
+    {{ forms.editableTableField({
+        label: 'Ignored Hosts'|t('link-audit'),
+        instructions: 'Whole domains nobody wants checked. A subdomain of a listed host counts as the host, so <code>example.com</code> covers <code>www.example.com</code> as well.'|t('link-audit'),
+        id: 'ignoreHosts',
+        name: 'settings[ignoreHosts]',
+        cols: {
+            enabled: { type: 'lightswitch', heading: 'On'|t('link-audit'), thin: true },
+            host: { type: 'singleline', heading: 'Host'|t('link-audit'), placeholder: 'example.com', code: true },
+            note: { type: 'singleline', heading: 'Note'|t('link-audit') },
+        },
+        rows: settings.ignoreHosts,
+        addRowLabel: 'Add a host'|t('link-audit'),
+        warning: config.ignoreHosts is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        allowAdd: not (readOnly or config.ignoreHosts is defined),
+        allowDelete: not (readOnly or config.ignoreHosts is defined),
+        allowReorder: not (readOnly or config.ignoreHosts is defined),
+        static: readOnly or config.ignoreHosts is defined,
+    }) }}
+
+    <hr>
+
+    {{ forms.editableTableField({
+        label: 'Extra Bot-Hostile Hosts'|t('link-audit'),
+        instructions: 'Hosts you know refuse automated requests. The plugin already knows the usual suspects; these are added to that list. A refusal from one of them is reported as unverifiable rather than broken, and is never counted against you, because a link nobody can check is not the same as a link that is gone. Hosts only here, one per row: every value in the row is read as a host name.'|t('link-audit'),
+        id: 'botHostileHosts',
+        name: 'settings[botHostileHosts]',
+        cols: {
+            host: { type: 'singleline', heading: 'Host'|t('link-audit'), placeholder: 'example.com', code: true },
+        },
+        rows: settings.botHostileHosts,
+        addRowLabel: 'Add a host'|t('link-audit'),
+        warning: config.botHostileHosts is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        allowAdd: not (readOnly or config.botHostileHosts is defined),
+        allowDelete: not (readOnly or config.botHostileHosts is defined),
+        allowReorder: not (readOnly or config.botHostileHosts is defined),
+        static: readOnly or config.botHostileHosts is defined,
+    }) }}
+{% endblock %}

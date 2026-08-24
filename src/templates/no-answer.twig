@@ -1,0 +1,38 @@
+{% extends '_layouts/cp' %}
+
+{% set title = 'No Answer'|t('link-audit') %}
+{% set selectedSubnavItem = 'no-answer' %}
+{% set crumbs = [
+    { label: 'Link Audit'|t('link-audit'), url: cpUrl('link-audit') },
+    { label: title },
+] %}
+
+{% if sites|length > 1 %}
+    {% set crumbs = [{
+        id: 'site-crumb',
+        icon: 'world',
+        label: site.name|t('site'),
+        menu: { items: siteMenuItems(sites, site), label: 'Select site'|t('app') },
+    }]|merge(crumbs) %}
+{% endif %}
+
+{% block content %}
+    <p class="light">
+        {{ 'These did not answer when they were asked: a server that was down or an address that would not resolve. They are tried again on their own, and one that keeps failing moves to Broken. Nothing to do here unless you already know a link is wrong.'|t('link-audit') }}
+    </p>
+
+    {% include 'link-audit/_includes/url-table' with {
+        verdict: verdict,
+        siteId: siteId,
+        siteHandle: siteHandle,
+        filters: filters,
+        hostOptions: hostOptions,
+        elementTypeOptions: elementTypeOptions,
+        sourceOptions: sourceOptions,
+        perPage: perPage,
+        total: total,
+        canRecheck: canRecheck,
+        canIgnore: canIgnore,
+        emptyMessage: 'Everything on this site answered when it was asked.'|t('link-audit'),
+    } only %}
+{% endblock %}

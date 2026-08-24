@@ -1,0 +1,87 @@
+{% css %}
+.link-audit-panel { margin-inline: var(--neg-padding); overflow: hidden; }
+.link-audit-code { display: inline-block; padding: 0 5px; border-radius: var(--radius-md); font-size: 11px; font-weight: 600; }
+.link-audit-code--2xx { background: var(--bg-success); color: var(--fg-success); }
+.link-audit-code--3xx { background: var(--bg-notice); color: var(--fg-notice); }
+.link-audit-code--4xx { background: var(--bg-error); color: var(--fg-error); }
+.link-audit-code--5xx { background: var(--bg-warning); color: var(--fg-warning); }
+.link-audit-panel__legend { display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 8px; }
+.link-audit-panel__when { font-size: 11px; font-weight: 400; color: var(--fg-subtle); text-transform: none; letter-spacing: normal; }
+.link-audit-panel__body { padding: 12px 18px 0; }
+.link-audit-panel__data { margin: 0; }
+.link-audit-panel__row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-block: 4px; }
+.link-audit-panel__row > dt { margin: 0; color: var(--fg-subtle); font-size: 12px; }
+.link-audit-panel__row > dd { margin: 0; text-align: end; }
+.link-audit-panel__urls { margin-block-start: 8px; }
+.link-audit-panel__url { margin-block-end: 4px; word-break: break-all; }
+.link-audit-panel__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; }
+{% endcss %}
+
+<fieldset>
+    <legend class="h6 link-audit-panel__legend">
+        <span>{{ 'Links'|t('link-audit') }}</span>
+        {% if summary.lastChecked %}
+            <span class="link-audit-panel__when">
+                {{ 'checked {date}'|t('link-audit', { date: summary.lastChecked|date('d M Y') }) }}
+            </span>
+        {% endif %}
+    </legend>
+
+    <div class="meta">
+        <div class="link-audit-panel">
+            <div class="link-audit-panel__body">
+                <dl class="link-audit-panel__data">
+                    {% if summary.total == 0 %}
+                        <div class="link-audit-panel__row">
+                            <dt>{{ 'Links Found'|t('link-audit') }}</dt>
+                            <dd>{{ 'None yet'|t('link-audit') }}</dd>
+                        </div>
+                    {% else %}
+                        <div class="link-audit-panel__row">
+                            <dt>{{ 'Links Checked'|t('link-audit') }}</dt>
+                            <dd>
+                                {{ '{checked} of {total}'|t('link-audit', { checked: summary.checked, total: summary.total }) }}
+                            </dd>
+                        </div>
+                        <div class="link-audit-panel__row">
+                            <dt>{{ 'Broken'|t('link-audit') }}</dt>
+                            <dd>
+                                <span class="status {{ summary.broken > 0 ? 'red' : 'green' }}"></span>
+                                {{ summary.broken }}
+                            </dd>
+                        </div>
+                    {% endif %}
+                </dl>
+
+                {% if summary.brokenUrls|length %}
+                    <ul class="link-audit-panel__urls">
+                        {% for broken in summary.brokenUrls %}
+                            <li class="link-audit-panel__url">
+                                <a href="{{ cpUrl('link-audit/url', { hash: broken.urlHash, site: site.handle }) }}"
+                                   title="{{ broken.url }}">
+                                    {{ broken.url|length > 44 ? broken.url|slice(0, 44) ~ '...' : broken.url }}
+                                </a>
+                                {% if broken.httpStatus %}
+                                    {% set codeKind = broken.httpStatus < 300 ? '2xx' : (broken.httpStatus < 400 ? '3xx' : (broken.httpStatus < 500 ? '4xx' : '5xx')) %}
+                                    <span class="link-audit-code link-audit-code--{{ codeKind }}" title="{{ broken.httpStatusLabel }}">{{ broken.httpStatus }}</span>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+
+                    {% if summary.broken > summary.brokenUrls|length %}
+                        <p class="light">
+                            {{ '{count} more not listed.'|t('link-audit', { count: summary.broken - summary.brokenUrls|length }) }}
+                        </p>
+                    {% endif %}
+                {% endif %}
+            </div>
+
+            <div class="link-audit-panel__foot">
+                <a class="go" href="{{ cpUrl('link-audit/broken', { site: site.handle }) }}">
+                    {{ 'Every broken link on this site'|t('link-audit') }}
+                </a>
+            </div>
+        </div>
+    </div>
+</fieldset>

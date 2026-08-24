@@ -1,0 +1,193 @@
+{% extends 'link-audit/_settings/layout' %}
+
+{% import '_includes/forms.twig' as forms %}
+
+{% block settingsFields %}
+    <div class="readable">
+        <blockquote class="note">
+            <p>
+                {{ 'These are the manners the checker goes out with. The defaults are set to be a good guest on somebody else\'s server: a handful of requests at a time, never more than two at any one host, and a gap between them. Raising them speeds a scan up and makes it look more like an attack, so raise them slowly and watch what comes back.'|t('link-audit') }}
+            </p>
+        </blockquote>
+    </div>
+
+    {{ forms.textField({
+        label: 'Concurrent Requests'|t('link-audit'),
+        instructions: 'How many requests are in the air at once, across every host together.'|t('link-audit'),
+        id: 'concurrency',
+        name: 'settings[concurrency]',
+        value: settings.concurrency,
+        type: 'number',
+        min: 1,
+        max: 50,
+        errors: settings.getErrors('concurrency'),
+        warning: config.concurrency is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.concurrency is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Concurrent Requests Per Host'|t('link-audit'),
+        instructions: 'How many of those may be at the same host. Keep it low. This is the number that decides whether a scan reads as a visitor or as a flood.'|t('link-audit'),
+        id: 'maxConcurrentPerHost',
+        name: 'settings[maxConcurrentPerHost]',
+        value: settings.maxConcurrentPerHost,
+        type: 'number',
+        min: 1,
+        max: 10,
+        errors: settings.getErrors('maxConcurrentPerHost'),
+        warning: config.maxConcurrentPerHost is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.maxConcurrentPerHost is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Minimum Delay Per Host (ms)'|t('link-audit'),
+        instructions: 'The least time left between two requests to the same host, in milliseconds. A host that answers with a 429, the code for "you are asking too often", raises its own gap from there.'|t('link-audit'),
+        id: 'minHostDelayMs',
+        name: 'settings[minHostDelayMs]',
+        value: settings.minHostDelayMs,
+        type: 'number',
+        min: 0,
+        max: 60000,
+        step: 50,
+        errors: settings.getErrors('minHostDelayMs'),
+        warning: config.minHostDelayMs is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.minHostDelayMs is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Connect Timeout (seconds)'|t('link-audit'),
+        instructions: 'How long to wait, in seconds, for the website to start answering.'|t('link-audit'),
+        id: 'connectTimeout',
+        name: 'settings[connectTimeout]',
+        value: settings.connectTimeout,
+        type: 'number',
+        min: 1,
+        max: 120,
+        errors: settings.getErrors('connectTimeout'),
+        warning: config.connectTimeout is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.connectTimeout is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Request Timeout (seconds)'|t('link-audit'),
+        instructions: 'How long to give the whole request before calling it off.'|t('link-audit'),
+        id: 'timeout',
+        name: 'settings[timeout]',
+        value: settings.timeout,
+        type: 'number',
+        min: 1,
+        max: 300,
+        errors: settings.getErrors('timeout'),
+        warning: config.timeout is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.timeout is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Maximum Redirects'|t('link-audit'),
+        instructions: 'How many hops a redirect chain is followed for before it is treated as going nowhere.'|t('link-audit'),
+        id: 'maxRedirects',
+        name: 'settings[maxRedirects]',
+        value: settings.maxRedirects,
+        type: 'number',
+        min: 0,
+        max: 20,
+        errors: settings.getErrors('maxRedirects'),
+        warning: config.maxRedirects is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.maxRedirects is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Retries'|t('link-audit'),
+        instructions: 'How many times a refused connection, a timeout or a 500 is tried again before a verdict is written. Retries are scheduled into a later pass rather than waited on, so they cost the scan nothing but time.'|t('link-audit'),
+        id: 'retryCount',
+        name: 'settings[retryCount]',
+        value: settings.retryCount,
+        type: 'number',
+        min: 0,
+        max: 10,
+        errors: settings.getErrors('retryCount'),
+        warning: config.retryCount is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.retryCount is defined,
+    }) }}
+
+    <hr>
+
+    <div class="readable">
+        <blockquote class="note">
+            <p>
+                {{ 'A link that does not answer is not the same as a link that is gone. Both settings below count consecutive failures: the link is held as No Answer until it has failed that many checks in a row, and only then goes on the Broken list. One good answer puts the count back to nothing.'|t('link-audit') }}
+            </p>
+        </blockquote>
+    </div>
+
+    {{ forms.textField({
+        label: 'Failures Before Broken'|t('link-audit'),
+        instructions: 'For a timeout, a refused connection or a 500. Three is a fair bar: it means one bad afternoon on somebody else\'s server does not fill your report with links that are grand again by morning.'|t('link-audit'),
+        id: 'brokenAfterFailures',
+        name: 'settings[brokenAfterFailures]',
+        value: settings.brokenAfterFailures,
+        type: 'number',
+        min: 1,
+        max: 20,
+        errors: settings.getErrors('brokenAfterFailures'),
+        warning: config.brokenAfterFailures is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.brokenAfterFailures is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Failures Before Broken (host does not resolve)'|t('link-audit'),
+        instructions: 'For a domain that no longer resolves at all. Lower on purpose. A timeout is often a server having a bad minute, but a domain that has stopped resolving is nearly always a domain that is gone, and making you wait another day to hear about it helps nobody.'|t('link-audit'),
+        id: 'brokenAfterDnsFailures',
+        name: 'settings[brokenAfterDnsFailures]',
+        value: settings.brokenAfterDnsFailures,
+        type: 'number',
+        min: 1,
+        max: 20,
+        errors: settings.getErrors('brokenAfterDnsFailures'),
+        warning: config.brokenAfterDnsFailures is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.brokenAfterDnsFailures is defined,
+    }) }}
+
+    <hr>
+
+    {{ forms.autosuggestField({
+        label: 'Checker User-Agent'|t('link-audit'),
+        instructions: 'Sent with every check. Left empty, the checker introduces itself with a <code>CraftLinkAudit</code> token, its version and an information URL, so a host admin who spots it in their logs can look it up and allow-list the lot with one rule. Set this only if you would rather it went out under your own name. You can reference an environment variable: type $ to see what is available.'|t('link-audit'),
+        id: 'userAgent',
+        name: 'settings[userAgent]',
+        value: settings.userAgent,
+        suggestEnvVars: true,
+        suggestAliases: false,
+        placeholder: '$LINK_AUDIT_USER_AGENT',
+        errors: settings.getErrors('userAgent'),
+        warning: config.userAgent is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.userAgent is defined,
+    }) }}
+
+    {{ forms.autosuggestField({
+        label: 'Proxy'|t('link-audit'),
+        instructions: 'Send every check through an outbound proxy, for the sort of network that will not let a server out any other way. Leave it empty to go direct. If the address carries credentials, keep it in an environment variable: type $ to see what is available.'|t('link-audit'),
+        id: 'proxy',
+        name: 'settings[proxy]',
+        value: settings.proxy,
+        suggestEnvVars: true,
+        suggestAliases: false,
+        placeholder: '$LINK_AUDIT_PROXY',
+        errors: settings.getErrors('proxy'),
+        warning: config.proxy is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.proxy is defined,
+    }) }}
+
+    {{ forms.lightswitchField({
+        label: 'Verify TLS Certificates'|t('link-audit'),
+        instructions: 'Leave this on. With it off, every https verdict means nothing: an expired or forged certificate passes the same as a good one, and a broken link is the least of what you would miss.'|t('link-audit'),
+        id: 'verifySsl',
+        name: 'settings[verifySsl]',
+        on: settings.verifySsl,
+        errors: settings.getErrors('verifySsl'),
+        warning: config.verifySsl is defined
+            ? 'Set in config/link-audit.php.'|t('link-audit')
+            : (not settings.verifySsl ? 'Certificate checking is off, so https verdicts cannot be trusted.'|t('link-audit') : null),
+        disabled: readOnly or config.verifySsl is defined,
+    }) }}
+{% endblock %}

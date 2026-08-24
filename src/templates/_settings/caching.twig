@@ -1,0 +1,104 @@
+{% extends 'link-audit/_settings/layout' %}
+
+{% import '_includes/forms.twig' as forms %}
+
+{% block settingsFields %}
+    <div class="readable">
+        <blockquote class="note">
+            <p>
+                {{ 'A verdict is kept and trusted for a while rather than asked again on every scan. That one idea is what makes a rescan cheap: the second run only pays for what has gone stale. Working links are trusted for weeks, broken ones are asked again the next day so a fix shows up quickly, and the ones nothing can be learned from are left the longest.'|t('link-audit') }}
+            </p>
+        </blockquote>
+    </div>
+
+    {{ forms.textField({
+        label: 'Trust Working Links For (days)'|t('link-audit'),
+        instructions: 'How long a link that answered is left alone before it is checked again.'|t('link-audit'),
+        id: 'okTtlDays',
+        name: 'settings[okTtlDays]',
+        value: settings.okTtlDays,
+        type: 'number',
+        min: 0,
+        errors: settings.getErrors('okTtlDays'),
+        warning: config.okTtlDays is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.okTtlDays is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Trust Redirects For (days)'|t('link-audit'),
+        instructions: 'The same, for a link that redirects somewhere that answers.'|t('link-audit'),
+        id: 'redirectTtlDays',
+        name: 'settings[redirectTtlDays]',
+        value: settings.redirectTtlDays,
+        type: 'number',
+        min: 0,
+        errors: settings.getErrors('redirectTtlDays'),
+        warning: config.redirectTtlDays is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.redirectTtlDays is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Recheck Broken Links After (hours)'|t('link-audit'),
+        instructions: 'Short on purpose. Somebody fixing a link today wants it off the list tomorrow, not next month.'|t('link-audit'),
+        id: 'brokenRecheckHours',
+        name: 'settings[brokenRecheckHours]',
+        value: settings.brokenRecheckHours,
+        type: 'number',
+        min: 0,
+        errors: settings.getErrors('brokenRecheckHours'),
+        warning: config.brokenRecheckHours is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.brokenRecheckHours is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Recheck Unreachable Links After (hours)'|t('link-audit'),
+        instructions: 'For links that did not answer at all. Shorter again, since these are the ones most likely to be grand by the afternoon.'|t('link-audit'),
+        id: 'unreachableRecheckHours',
+        name: 'settings[unreachableRecheckHours]',
+        value: settings.unreachableRecheckHours,
+        type: 'number',
+        min: 0,
+        errors: settings.getErrors('unreachableRecheckHours'),
+        warning: config.unreachableRecheckHours is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.unreachableRecheckHours is defined,
+    }) }}
+
+    {{ forms.textField({
+        label: 'Recheck Unverifiable Links After (days)'|t('link-audit'),
+        instructions: 'For hosts that block automated requests as a matter of policy. Long on purpose: asking them again sooner will not change the answer, and it only annoys them.'|t('link-audit'),
+        id: 'blockedTtlDays',
+        name: 'settings[blockedTtlDays]',
+        value: settings.blockedTtlDays,
+        type: 'number',
+        min: 0,
+        errors: settings.getErrors('blockedTtlDays'),
+        warning: config.blockedTtlDays is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.blockedTtlDays is defined,
+    }) }}
+
+    <hr>
+
+    {{ forms.textField({
+        label: 'Retain Scan History (days)'|t('link-audit'),
+        instructions: 'How long finished scan records are kept when <code>php craft link-audit/scan/prune</code> runs. Nothing is thrown away until that command is run. Set 0 to keep the lot.'|t('link-audit'),
+        id: 'retainDays',
+        name: 'settings[retainDays]',
+        value: settings.retainDays,
+        type: 'number',
+        min: 0,
+        errors: settings.getErrors('retainDays'),
+        warning: config.retainDays is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.retainDays is defined,
+    }) }}
+
+    {{ forms.lightswitchField({
+        label: 'Delete Unreferenced URLs'|t('link-audit'),
+        instructions: 'When a scan finishes, throw away URL rows nothing points at any more, so the table stays the size of your content rather than the size of everything your content has ever said. An author\'s decision to ignore a URL is kept either way: those live in their own table and survive the tidy up.'|t('link-audit'),
+        id: 'pruneOrphanUrls',
+        name: 'settings[pruneOrphanUrls]',
+        on: settings.pruneOrphanUrls,
+        errors: settings.getErrors('pruneOrphanUrls'),
+        warning: config.pruneOrphanUrls is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.pruneOrphanUrls is defined,
+    }) }}
+{% endblock %}

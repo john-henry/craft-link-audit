@@ -1,0 +1,83 @@
+{% extends '_layouts/cp' %}
+
+{% import '_includes/forms.twig' as forms %}
+
+{% set title = 'Ignored'|t('link-audit') %}
+{% set selectedSubnavItem = 'ignored' %}
+{% set crumbs = [
+    { label: 'Link Audit'|t('link-audit'), url: cpUrl('link-audit') },
+    { label: title },
+] %}
+
+{% if sites|length > 1 %}
+    {% set crumbs = [{
+        id: 'site-crumb',
+        icon: 'world',
+        label: site.name|t('site'),
+        menu: { items: siteMenuItems(sites, site), label: 'Select site'|t('app') },
+    }]|merge(crumbs) %}
+{% endif %}
+
+{% block content %}
+    <p class="light">
+        {{ 'Somebody decided these do not need reporting. They are left out of every other list and never checked again, and the decision holds through a full rescan. There is nothing to do here unless one of them needs watching again: Restore puts it back on the lists and checks it there and then. URLs quieted by an ignore rule in the settings are not listed here, those are edited in the settings.'|t('link-audit') }}
+    </p>
+
+    {% if rows|length == 0 %}
+        <div class="zilch">
+            <p>{{ 'Nothing has been ignored. Every link found is still being reported.'|t('link-audit') }}</p>
+        </div>
+    {% else %}
+        <div class="pane">
+            <table class="data fullwidth">
+                <thead>
+                    <tr>
+                        <th scope="col">{{ 'URL'|t('link-audit') }}</th>
+                        <th scope="col">{{ 'Why'|t('link-audit') }}</th>
+                        <th scope="col">{{ 'Who'|t('link-audit') }}</th>
+                        <th scope="col">{{ 'When'|t('link-audit') }}</th>
+                        {% if canManageIgnores %}
+                            <th scope="col">{{ 'Do something'|t('link-audit') }}</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            <td style="word-break:break-all">
+                                {% if row.detailUrl %}
+                                    <a href="{{ row.detailUrl }}">{{ row.url }}</a>
+                                {% else %}
+                                    {{ row.value ?? row.urlHash }}
+                                    <span class="light">{{ '(nothing points at it any more)'|t('link-audit') }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ row.note ?: '-' }}</td>
+                            <td>
+                                {% if row.fullName or row.username %}
+                                    {{ row.fullName ?: row.username }}
+                                {% else %}
+                                    <span class="light">{{ 'Somebody who has since left'|t('link-audit') }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ row.dateIgnored ? row.dateIgnored|datetime('short') : '-' }}</td>
+                            {% if canManageIgnores %}
+                                <td>
+                                    <form method="post" accept-charset="UTF-8">
+                                        {{ csrfInput() }}
+                                        {{ actionInput('link-audit/url-actions/restore') }}
+                                        {{ redirectInput('link-audit/ignored?site=' ~ siteHandle) }}
+                                        {{ forms.hidden({ name: 'hash', value: row.urlHash }) }}
+                                        <button type="submit" class="btn small">
+                                            {{ 'Restore'|t('link-audit') }}
+                                        </button>
+                                    </form>
+                                </td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+{% endblock %}
