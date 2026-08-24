@@ -1,5 +1,10 @@
 # Release Notes for Link Audit
 
+## 1.0.0-beta.4 - 2026-08-24
+
+### Fixed
+- Internal URLs held by a disabled element are now verified over HTTP like any other address the database cannot vouch for, instead of being reported broken from the disabled match alone. A redirect covering a retired page, the usual housekeeping when an entry is disabled and a Retour rule takes over its address, now reports as the redirect it is, with its destination.
+
 ## 1.0.0-beta.3 - 2026-08-24
 
 ### Added

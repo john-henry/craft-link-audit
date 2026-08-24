@@ -91,13 +91,14 @@ it('says a URL matching a live entry is fine', function() {
         ->and($verdict->reason)->toBeNull();
 });
 
-it('calls a URL matching a disabled entry broken, and says it is disabled', function() {
+it('leaves a URL matching a disabled entry to the check phase, because a redirect may be answering for it', function() {
+    // Retiring a page by disabling its entry and putting a redirect over the
+    // address is ordinary housekeeping, so a disabled match proves nothing:
+    // the server may 301 the address somewhere live, and only asking it says.
     $entry = ilEntry(enabled: false);
     $verdict = ilResolver()->resolveUrl(ilUrl("la-fixture/$entry->slug"), ilSiteId());
 
-    expect($verdict->status)->toBe(UrlStatus::Broken)
-        ->and($verdict->reason)->toBe(Verdict::REASON_NO_ELEMENT)
-        ->and($verdict->message)->toContain('disabled');
+    expect($verdict)->toBeNull();
 });
 
 it('leaves a URL matching nothing at all pending for the check phase, instead of calling it broken', function() {

@@ -215,23 +215,17 @@ class InternalResolver extends Component
             return $this->_fragmentVerdict($url);
         }
 
-        // An element is sitting at that address with its switch off. The server
-        // would answer it with a 404, which tells the author less than this
-        // does, so the server is not asked.
-        if ($this->_disabledElementExists($uri, (int)$site->id)) {
-            return $this->_broken(
-                'The page at this address is disabled on this site, so nobody can see it.',
-            );
-        }
-
         if ($this->_matchesAllowPattern($uri)) {
             return new Verdict(status: UrlStatus::Ignored);
         }
 
-        // Nothing in the database answers to this address, but that is not the
-        // same as nobody: a redirect rule, a file, a route registered at
-        // runtime, all of them are served by the server and by nothing that can
-        // be looked up here. Only a request can say which it is.
+        // No live element and no route answers to this address, but that is
+        // not the same as nobody: a redirect rule, a file, a route registered
+        // at runtime, all of them are served by the server and by nothing that
+        // can be looked up here. A disabled element holding the URI proves
+        // nothing either way, because retiring a page by disabling its entry
+        // and putting a redirect over the address is ordinary housekeeping.
+        // Only a request can say which it is.
         return null;
     }
 
@@ -254,45 +248,6 @@ class InternalResolver extends Component
             reason: Verdict::REASON_NO_ELEMENT,
             message: $message,
         );
-    }
-
-    /**
-     * Whether an element on a site holds a URI but is switched off.
-     *
-     * Only ever asked about a URI no live element and no route answered for, so
-     * the live lookup has already had its say. Off at either level counts: an
-     * element disabled everywhere and an element disabled on this one site are
-     * the same thing to a visitor, and the author is told the same thing about
-     * both.
-     *
-     * Drafts, revisions and trashed rows are excluded here as they are in the
-     * live lookup. A draft holding the URI does not mean the address is served,
-     * and a trashed element has gone as far as a visitor is concerned.
-     *
-     * @param string $uri The URI, as `elements_sites` stores it.
-     * @param int $siteId The site to look in.
-     * @return bool Whether a disabled element holds it.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _disabledElementExists(string $uri, int $siteId): bool
-    {
-        return (new Query())
-            ->from(['elements_sites' => Table::ELEMENTS_SITES])
-            ->innerJoin(['elements' => Table::ELEMENTS], '[[elements.id]] = [[elements_sites.elementId]]')
-            ->where([
-                'elements_sites.siteId' => $siteId,
-                'elements_sites.uri' => $uri,
-                'elements.draftId' => null,
-                'elements.revisionId' => null,
-                'elements.dateDeleted' => null,
-            ])
-            ->andWhere([
-                'or',
-                ['elements_sites.enabled' => false],
-                ['elements.enabled' => false],
-            ])
-            ->exists();
     }
 
     /**
