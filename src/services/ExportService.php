@@ -9,6 +9,7 @@ namespace johnhenry\linkaudit\services;
 use Craft;
 use craft\base\ElementInterface;
 use craft\db\Query;
+use craft\db\Table;
 use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
 use DateTimeInterface;
@@ -99,8 +100,9 @@ class ExportService extends Component
      * @param int[] $siteIds The sites to read references on. The caller fences
      *                       this: nothing here checks who is asking.
      * @param array<string, mixed> $filters Any of `host`, `elementType`,
-     *                                      `source` and `permanent`, exactly as
-     *                                      the list screen carries them.
+     *                                      `source`, `permanent` and `search`,
+     *                                      exactly as the list screen carries
+     *                                      them.
      * @return Generator<int, string> The file, in chunks.
      * @author John Henry Donovan
      * @since 1.0.0
@@ -117,7 +119,7 @@ class ExportService extends Component
 
         foreach ($this->_batches($status, $siteIds, $filters) as $batch) {
             $places = $this->_placeCounts($batch, $siteIds, $filters);
-            $elements = $this->_ownerElements($batch);
+            $elements = $this->_elements($batch);
 
             yield $this->_chunk(array_map(
                 fn(array $row): array => $this->_row($row, $elements, $places, $sourceLabels),
@@ -154,7 +156,7 @@ class ExportService extends Component
      * @param UrlStatus $status The verdict being exported.
      * @param int[] $siteIds The sites to read references on.
      * @param array<string, mixed> $filters Any of `host`, `elementType`,
-     *                                      `source` and `permanent`.
+     *                                      `source`, `permanent` and `search`.
      * @return int The number of reference rows.
      * @author John Henry Donovan
      * @since 1.0.0
@@ -330,6 +332,141 @@ class ExportService extends Component
     }
 
     /**
+     * An element and the site it is read on, as one memo key.
+     *
+     * @param int $elementId The element.
+     * @param int $siteId The site it is read on.
+     * @return string The memo key.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _elementKey(int $elementId, int $siteId): string
+    {
+        return $elementId . '-' . $siteId;
+    }
+
+    /**
+     * Every element a batch of rows has something to say about.
+     *
+     * Two per row at most, and usually one. The owner is the page the Page
+     * column names, for the reason {@see ReportService::references()} gives: a
+     * link inside a Matrix block belongs to the block for storage and to the
+     * page for editing, and the page is the only one of the two an editor has
+     * ever seen. The element the link actually sits on is loaded as well when it
+     * is a different one, because that is where the Field column's label comes
+     * from: a field layout can override a field's label, and the override is the
+     * name the editor is looking for on screen.
+     *
+     * Loaded by type rather than one at a time. Asking Craft for an element
+     * without naming its class costs a lookup query before the read, so a batch
+     * of five hundred references was a thousand queries; grouping the ids by the
+     * type stored against them turns the whole batch into one query for the
+     * types and one per type and site after it. The result is a local, so it
+     * goes when the batch does and an export of a hundred thousand references
+     * never holds more than a batch of pages at a time.
+     *
+     * @param array<int, array<string, mixed>> $batch The reference rows.
+     * @return array<string, ElementInterface> Element id and site id to the
+     *                                         element. A key is simply missing
+     *                                         when the element could not be
+     *                                         loaded.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _elements(array $batch): array
+    {
+        $wanted = [];
+
+        foreach ($batch as $row) {
+            $siteId = (int)$row['siteId'];
+
+            foreach ([$this->_ownerId($row), (int)$row['elementId']] as $elementId) {
+                $wanted[$this->_elementKey($elementId, $siteId)] = ['id' => $elementId, 'siteId' => $siteId];
+            }
+        }
+
+        if ($wanted === []) {
+            return [];
+        }
+
+        $types = $this->_elementTypes(array_values(array_map(
+            static fn(array $want): int => $want['id'],
+            $wanted,
+        )));
+        $groups = [];
+
+        foreach ($wanted as $want) {
+            $type = $types[$want['id']] ?? null;
+
+            if ($type === null) {
+                continue;
+            }
+
+            $groups[$type][$want['siteId']][] = $want['id'];
+        }
+
+        $loaded = [];
+
+        foreach ($groups as $type => $idsBySite) {
+            foreach ($idsBySite as $siteId => $ids) {
+                // The same criteria Craft's own getElementById() applies, so a
+                // row naming an unpublished page still names it: a reference is
+                // recorded against whatever holds the link, enabled or not.
+                $found = $type::find()
+                    ->id(array_values(array_unique($ids)))
+                    ->siteId($siteId)
+                    ->status(null)
+                    ->drafts(null)
+                    ->provisionalDrafts(null)
+                    ->revisions(null)
+                    ->indexBy('id')
+                    ->all();
+
+                foreach ($found as $id => $element) {
+                    $loaded[$this->_elementKey((int)$id, (int)$siteId)] = $element;
+                }
+            }
+        }
+
+        return $loaded;
+    }
+
+    /**
+     * The class stored against each of a set of element ids.
+     *
+     * One query for the lot. A class the installation no longer has is left out
+     * rather than guessed at: a reference outlives its element type, so this
+     * really happens, and the columns it feeds are left blank instead.
+     *
+     * @param array<int, int> $ids The element ids.
+     * @return array<int, class-string<ElementInterface>> Element id to class.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _elementTypes(array $ids): array
+    {
+        $rows = (new Query())
+            ->select(['id', 'type'])
+            ->from([Table::ELEMENTS])
+            ->where(['id' => array_values(array_unique($ids))])
+            ->all();
+
+        $types = [];
+
+        foreach ($rows as $row) {
+            $type = (string)$row['type'];
+
+            if (!class_exists($type) || !is_subclass_of($type, ElementInterface::class)) {
+                continue;
+            }
+
+            $types[(int)$row['id']] = $type;
+        }
+
+        return $types;
+    }
+
+    /**
      * The column headings.
      *
      * @return array<int, string> The heading row.
@@ -359,48 +496,6 @@ class ExportService extends Component
     }
 
     /**
-     * The owning element behind every row in a batch.
-     *
-     * The owner rather than the element the link was found in, for the reason
-     * {@see ReportService::references()} gives: a link inside a Matrix block
-     * belongs to the block for storage and to the page for editing, and the page
-     * is the only one of the two an editor has ever seen.
-     *
-     * Loaded once per element per batch rather than once per row, since the
-     * whole shape of this report is one page carrying a good many links. The
-     * memo is a local, so it goes when the batch does and an export of a hundred
-     * thousand references never holds more than a batch of pages at a time.
-     *
-     * @param array<int, array<string, mixed>> $batch The reference rows.
-     * @return array<string, ElementInterface|null> Element id and site id to the
-     *                                              element, or to null when it
-     *                                              could not be loaded.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _ownerElements(array $batch): array
-    {
-        $elements = Craft::$app->getElements();
-        $loaded = [];
-
-        foreach ($batch as $row) {
-            $key = $this->_ownerKey($row);
-
-            if (array_key_exists($key, $loaded)) {
-                continue;
-            }
-
-            $loaded[$key] = $elements->getElementById(
-                $this->_ownerId($row),
-                null,
-                (int)$row['siteId'],
-            );
-        }
-
-        return $loaded;
-    }
-
-    /**
      * The element a reference row is answerable to.
      *
      * @param array<string, mixed> $row The reference row.
@@ -425,7 +520,7 @@ class ExportService extends Component
      */
     private function _ownerKey(array $row): string
     {
-        return $this->_ownerId($row) . '-' . (int)$row['siteId'];
+        return $this->_elementKey($this->_ownerId($row), (int)$row['siteId']);
     }
 
     /**
@@ -528,9 +623,35 @@ class ExportService extends Component
             $query->andWhere(['u.redirectPermanent' => $permanent === '1']);
         }
 
+        // The same match {@see ReportService::_urlQuery()} makes, so a reader
+        // who typed something into the table's search box and then pressed
+        // Download gets the rows they were looking at rather than the whole
+        // list again.
+        $search = trim((string)($filters['search'] ?? ''));
+
+        if ($search !== '') {
+            $query->andWhere(Db::parseParam('u.url', '*' . $search . '*'));
+        }
+
         $this->_addReferenceFilters($query, $filters);
 
         return $query;
+    }
+
+    /**
+     * The element a reference row's field label has to come off.
+     *
+     * The element the link actually sits on, which is the owner itself unless
+     * the link is in something nested.
+     *
+     * @param array<string, mixed> $row The reference row.
+     * @return string The memo key.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _referenceKey(array $row): string
+    {
+        return $this->_elementKey((int)$row['elementId'], (int)$row['siteId']);
     }
 
     /**
@@ -542,8 +663,7 @@ class ExportService extends Component
      * they have to translate in their head.
      *
      * @param array<string, mixed> $row The reference row.
-     * @param array<string, ElementInterface|null> $elements The batch's owning
-     *                                                       elements.
+     * @param array<string, ElementInterface> $elements The batch's elements.
      * @param array<int, int> $places The batch's place counts.
      * @param array<string, string> $sourceLabels What each source is called.
      * @return array<int, string> The cells.
@@ -555,6 +675,11 @@ class ExportService extends Component
         $report = LinkAudit::$plugin->getReportService();
         $status = UrlStatus::tryFrom((string)$row['status']) ?? UrlStatus::Pending;
         $element = $elements[$this->_ownerKey($row)] ?? null;
+        // The Page column names the owner, because that is the page an editor
+        // opens. The Field column has to come off the element the link is
+        // actually stored on, because a field layout can override a field's
+        // label and the override is the only name that editor has ever seen.
+        $fieldElement = $elements[$this->_referenceKey($row)] ?? null;
         $site = Craft::$app->getSites()->getSiteById((int)$row['siteId']);
         $source = (string)$row['source'];
 
@@ -572,7 +697,7 @@ class ExportService extends Component
             $element?->getUiLabel(),
             $report->elementTypeLabel((string)$row['elementType']),
             $site?->name,
-            $report->fieldName($row, $element),
+            $report->fieldName($row, $fieldElement),
             $row['linkText'],
             $sourceLabels[$source] ?? $source,
             $places[(int)$row['urlId']] ?? 1,

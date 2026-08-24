@@ -4,7 +4,9 @@
  * @copyright Copyright (c) John Henry Donovan
  */
 
+use craft\elements\Entry;
 use craft\elements\User;
+use craft\helpers\StringHelper;
 use johnhenry\linkaudit\console\controllers\ExportController as ConsoleExportController;
 use johnhenry\linkaudit\controllers\BaseController;
 use johnhenry\linkaudit\enums\UrlStatus;
@@ -14,6 +16,7 @@ use johnhenry\linkaudit\models\Verdict;
 use johnhenry\linkaudit\records\ReferenceRecord;
 use johnhenry\linkaudit\records\ScanRecord;
 use johnhenry\linkaudit\records\UrlRecord;
+use markhuot\craftpest\factories\Entry as EntryFactory;
 use markhuot\craftpest\factories\User as UserFactory;
 
 // ---------------------------------------------------------------------------
@@ -42,6 +45,31 @@ function exportClearTables(): void
     foreach ([ReferenceRecord::tableName(), UrlRecord::tableName(), ScanRecord::tableName()] as $table) {
         $db->createCommand()->delete($table)->execute();
     }
+}
+
+/**
+ * An entry in the dedicated laFixture section.
+ *
+ * The section and its fields live in project config rather than being made here:
+ * creating a section auto-commits the transaction RefreshesDatabase relies on.
+ */
+function exportEntry(): Entry
+{
+    $section = Craft::$app->getEntries()->getSectionByHandle('laFixture');
+
+    if ($section === null) {
+        throw new RuntimeException(
+            'The laFixture test section is missing. Run `ddev craft project-config/apply`.',
+        );
+    }
+
+    $slug = 'la-export-' . StringHelper::toLowerCase(StringHelper::randomString(10));
+
+    return EntryFactory::factory()
+        ->section($section)
+        ->title('LA export ' . $slug)
+        ->slug($slug)
+        ->create();
 }
 
 /** The whole export as one string, the way a caller would assemble it. */
@@ -253,6 +281,39 @@ describe('The export service', function() {
         expect(array_unique(array_column(array_slice($rows, 1), 7)))->toHaveCount(3);
     });
 
+    // The Page column names the page an editor opens, which is the owner. The
+    // Field column cannot come off the same element: a field layout can override
+    // a field's label, and the override is the only name that editor has ever
+    // seen. The block layout here calls LA Body "Block Body" and the page's
+    // layout does not, so a file built off the owner names the wrong field.
+    it('names a nested link by the label the block layout gives it', function() {
+        $entry = exportEntry();
+        $entry->setFieldValue('laBlocks', [
+            'new1' => [
+                'type' => 'laBlock',
+                'fields' => [
+                    'laBody' => '<p><a href="https://example.com/inside-a-block">Block link</a></p>',
+                ],
+            ],
+        ]);
+        Craft::$app->getElements()->saveElement($entry);
+
+        $siteId = (int)$entry->siteId;
+        LinkAudit::getInstance()->getScanService()->extractElement((int)$entry->id, Entry::class, $siteId);
+
+        $store = LinkAudit::getInstance()->getUrlStore();
+        $urlId = $store->upsert('https://example.com/inside-a-block', false);
+        $store->recordVerdict($urlId, new Verdict(status: UrlStatus::Broken, httpStatus: 404));
+
+        $row = exportRows(exportCsv(UrlStatus::Broken, [$siteId]))[1];
+        $reference = LinkAudit::getInstance()->getReportService()->references($urlId, [$siteId])[0];
+
+        expect($row[10])->toBe('Block Body')
+            // The same label the URL detail screen puts on the same reference.
+            ->and($reference['fieldName'])->toBe('Block Body')
+            ->and($row[7])->toBe($entry->getUiLabel());
+    });
+
     it('says what the screen says, not what the database holds', function() {
         $user = UserFactory::factory()->create();
 
@@ -406,6 +467,13 @@ describe('The filters', function() {
             ->and($rows[0][13])->toBe('1');
     });
 
+    it('honours what was typed into the table\'s search box', function() {
+        $csv = exportCsv(UrlStatus::Broken, [exportSiteId()], ['search' => 'kept']);
+
+        expect($csv)->toContain('kept.example/one')
+            ->and($csv)->not->toContain('dropped.example/two');
+    });
+
     it('honours whether a redirect is permanent', function() {
         exportSeed('https://redirects.example/for-good', exportSiteId(), [
             ['elementId' => (int)UserFactory::factory()->create()->id],
@@ -486,6 +554,51 @@ describe('The download endpoint', function() {
 
         expect($csv)->toContain('kept.example/downloaded')
             ->and($csv)->not->toContain('dropped.example/downloaded');
+    });
+
+    // The search box lives inside the table component, so it never reaches the
+    // page's own URL and the screen's JavaScript puts it on the button's link
+    // instead. What matters here is that the endpoint takes it when it arrives.
+    it('narrows the file to what the reader searched for', function() {
+        exportSeed('https://searched.example/wanted', exportSiteId(), [
+            ['elementId' => (int)UserFactory::factory()->create()->id],
+        ]);
+        exportSeed('https://searched.example/not-this-one', exportSiteId(), [
+            ['elementId' => (int)UserFactory::factory()->create()->id],
+        ]);
+
+        $csv = exportStreamed(exportRequest(['search' => 'wanted']));
+
+        expect($csv)->toContain('searched.example/wanted')
+            ->and($csv)->not->toContain('not-this-one');
+    });
+
+    // By the time the rows are read the headers have gone out saying 200 and
+    // text/csv, so an exception escaping the stream would put Craft's error page
+    // into the file the browser is already writing. A short file is a failure
+    // somebody notices; a spreadsheet with a page of HTML at the bottom of it is
+    // not.
+    it('stops cleanly rather than writing an error page into the file', function() {
+        $plugin = LinkAudit::getInstance();
+        $original = $plugin->getExportService();
+
+        $plugin->set('exportService', new class extends johnhenry\linkaudit\services\ExportService {
+            public function csv(UrlStatus $status, array $siteIds, array $filters = []): Generator
+            {
+                yield "URL\r\n";
+                yield "https://example.com/written-before-it-broke\r\n";
+
+                throw new RuntimeException('The database went away mid-read.');
+            }
+        });
+
+        try {
+            $csv = exportStreamed(exportRequest());
+        } finally {
+            $plugin->set('exportService', $original);
+        }
+
+        expect($csv)->toBe("URL\r\nhttps://example.com/written-before-it-broke\r\n");
     });
 
     it('refuses a reader without the report permission', function() {

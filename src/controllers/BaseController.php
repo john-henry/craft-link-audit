@@ -39,6 +39,46 @@ abstract class BaseController extends Controller
     // =========================================================================
 
     /**
+     * @var string[] The strings the screens' own JavaScript asks `Craft.t()`
+     * for.
+     *
+     * Exactly the strings `Craft.t('link-audit', ...)` is called with in
+     * `index.twig` and `_includes/url-table.twig`, and it has to track them: a
+     * string added to a template and not added here can never be translated,
+     * because `Craft.t()` only knows what the page was told about before it
+     * rendered. One left here after its template stopped using it is a few bytes
+     * on the page and nothing worse.
+     *
+     * A constant rather than a literal inside the method, so a test can hold it
+     * against the templates and say when the two have drifted.
+     */
+    public const JS_TRANSLATIONS = [
+        'Back',
+        'Check again',
+        'Checked: {verdict} ({code}).',
+        'Checked: {verdict}.',
+        'Code',
+        'Copy the new address',
+        'Copy this URL',
+        'Do something',
+        'Done',
+        'Goes To',
+        'Host',
+        'Ignore',
+        'Last Checked',
+        'Next',
+        'Nothing matches those filters. Loosen them and the rest comes back.',
+        'Open in a new tab',
+        'Permanent',
+        'Places',
+        'Search these URLs',
+        'Temporary',
+        'That did not work. Try again.',
+        'URL',
+        'URL copied.',
+    ];
+
+    /**
      * @var string Dismiss a URL, or bring a dismissed one back.
      *
      * A different decision from running a scan: an ignore changes what every
@@ -133,6 +173,27 @@ abstract class BaseController extends Controller
         }
 
         return $sites;
+    }
+
+    /**
+     * Hands the browser the strings the screens' own JavaScript asks for.
+     *
+     * `Craft.t()` translates against whatever the page was told about before it
+     * rendered, and nothing else. A category with no strings registered against
+     * it is not a fallback, it is a silent passthrough: every one of these comes
+     * out in English no matter what language the reader has picked, and no
+     * amount of filling in the translation file changes it.
+     *
+     * What goes out is {@see self::JS_TRANSLATIONS}, which is the list that has
+     * to track the templates.
+     *
+     * @return void
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    protected function registerJsTranslations(): void
+    {
+        Craft::$app->getView()->registerTranslations('link-audit', self::JS_TRANSLATIONS);
     }
 
     /**

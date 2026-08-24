@@ -54,6 +54,8 @@ class DashboardController extends BaseController
         $identity = Craft::$app->getUser()->getIdentity();
         $canRunScans = Craft::$app->getUser()->checkPermission(self::PERMISSION_RUN_SCANS);
 
+        $this->registerJsTranslations();
+
         return $this->renderTemplate('link-audit/index', [
             'site' => $site,
             'siteId' => $siteId,
@@ -74,7 +76,15 @@ class DashboardController extends BaseController
             // The tour explains what the counts mean, so it runs itself the
             // first time somebody opens this and never again unasked. The link
             // at the bottom of the page is how it comes back.
-            'tourAutoStart' => $identity !== null && !$tour->hasSeen($identity),
+            //
+            // Not on an install that has never been scanned, though. The tiles
+            // and the panes are the tour's whole subject and none of them are on
+            // the page yet, so it would open on whatever is left, say nothing
+            // worth reading, and record itself as seen: the one reader who
+            // needed it would never be offered it again.
+            'tourAutoStart' => $identity !== null
+                && ($latestScan !== null || $runningScan !== null)
+                && !$tour->hasSeen($identity),
             'tourSeenUrl' => UrlHelper::actionUrl('link-audit/tour/seen'),
             'tourSteps' => $tour->stepsForOverview($canRunScans),
         ]);

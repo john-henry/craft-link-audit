@@ -58,7 +58,7 @@
             }|filter(value => value is not null and value != '') %}
 
             <div class="field">
-                <a class="btn" data-icon="download"
+                <a class="btn" data-icon="download" id="link-audit-export"
                    href="{{ actionUrl('link-audit/export/csv', exportParams) }}">
                     {{ 'Download CSV'|t('link-audit') }}
                 </a>
@@ -300,6 +300,50 @@
                 ? Craft.t('link-audit', 'Nothing matches those filters. Loosen them and the rest comes back.')
                 : {{ emptyMessage|json_encode|raw }},
             tableDataEndpoint: 'link-audit/urls/table?' + query,
+        });
+
+        var exportLink = document.getElementById('link-audit-export');
+        var exportHref = exportLink !== null ? exportLink.getAttribute('href') : '';
+        var searchTimer = null;
+
+        // The search box belongs to the table component rather than to the
+        // filter bar, so it never reaches the page's own URL and the server has
+        // nothing to build the Download CSV link with. The link is rewritten
+        // here instead, as the box is typed in and when it is cleared, so
+        // pressing Download hands the reader the rows in front of them rather
+        // than the whole list again.
+        function syncExportHref() {
+            if (exportLink === null) {
+                return;
+            }
+
+            var field = container.querySelector('.texticon.search input[type="text"]');
+            var term = field !== null ? field.value.trim() : '';
+            var separator = exportHref.indexOf('?') === -1 ? '?' : '&';
+
+            exportLink.setAttribute(
+                'href',
+                term === '' ? exportHref : exportHref + separator + 'search=' + encodeURIComponent(term)
+            );
+        }
+
+        container.addEventListener('input', function(event) {
+            if (!event.target.closest('.texticon.search')) {
+                return;
+            }
+
+            window.clearTimeout(searchTimer);
+            searchTimer = window.setTimeout(syncExportHref, 250);
+        });
+
+        // The clear button empties the box without anybody typing in it, and
+        // Vue redraws the field on its own tick, so the read waits a turn.
+        container.addEventListener('click', function(event) {
+            if (!event.target.closest('.clear-btn')) {
+                return;
+            }
+
+            window.setTimeout(syncExportHref, 0);
         });
 
         container.addEventListener('click', function(event) {

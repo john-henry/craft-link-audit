@@ -48,6 +48,14 @@ class UninstallService extends Component
     // =========================================================================
 
     /**
+     * @var int How many queue rows are read at a time.
+     *
+     * Small enough that a queue of any size is a bounded amount of memory, big
+     * enough that the read is not a round trip per job.
+     */
+    private const _JOB_BATCH_SIZE = 200;
+
+    /**
      * @var string The plugin's own namespace, which is how a queued job is told
      * apart from everybody else's.
      */
@@ -193,6 +201,11 @@ class UninstallService extends Component
      * is no table to read, and a plugin has no business guessing at whatever
      * has been configured in its place.
      *
+     * Read a batch at a time rather than all at once. A queue on a busy install
+     * is tens of thousands of rows and every one of them carries a serialised
+     * object in a blob, so reading the table whole is the whole queue in memory
+     * at once, and it happens inside the transaction the uninstall opened.
+     *
      * @return int How many jobs were released.
      * @throws InvalidConfigException If the queue component cannot be resolved.
      * @author John Henry Donovan
@@ -206,20 +219,21 @@ class UninstallService extends Component
             return 0;
         }
 
-        $rows = (new Query())
+        $query = (new Query())
             ->select(['id', 'job'])
-            ->from($queue->tableName)
-            ->all();
+            ->from($queue->tableName);
 
         $released = 0;
 
-        foreach ($rows as $row) {
-            if (!str_contains($this->_payload($row['job']), self::_JOB_NAMESPACE)) {
-                continue;
-            }
+        foreach ($query->batch(self::_JOB_BATCH_SIZE) as $rows) {
+            foreach ($rows as $row) {
+                if (!str_contains($this->_payload($row['job']), self::_JOB_NAMESPACE)) {
+                    continue;
+                }
 
-            $queue->release((string)$row['id']);
-            $released++;
+                $queue->release((string)$row['id']);
+                $released++;
+            }
         }
 
         return $released;

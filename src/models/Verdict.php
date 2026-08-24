@@ -112,43 +112,6 @@ class Verdict
     // =========================================================================
 
     /**
-     * What a stored reason code is called on screen.
-     *
-     * The codes are developer vocabulary and land in the database as-is; an
-     * editor reading the URL detail page gets these instead. An unrecognised
-     * code (an old row from before a rename, say) is shown as it is stored
-     * rather than hidden.
-     *
-     * @param string|null $reason The stored reason code.
-     * @return string|null The label, or null when there is no reason at all.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    public static function reasonLabel(?string $reason): ?string
-    {
-        if ($reason === null || $reason === '') {
-            return null;
-        }
-
-        return match ($reason) {
-            self::REASON_CONNECT => Craft::t('link-audit', 'Could not connect'),
-            self::REASON_DNS => Craft::t('link-audit', 'Could not find that domain'),
-            self::REASON_FRAGMENT => Craft::t('link-audit', 'Missing anchor on the page'),
-            self::REASON_HOST_BACKOFF => Craft::t('link-audit', 'Host asked to be left alone for a while'),
-            self::REASON_HTTP => Craft::t('link-audit', 'The server answered with an error'),
-            self::REASON_IGNORED => Craft::t('link-audit', 'Ignored by a person'),
-            self::REASON_IGNORE_RULE => Craft::t('link-audit', 'Ignored by a rule in the settings'),
-            self::REASON_NO_ELEMENT => Craft::t('link-audit', 'Nothing on this site answers to it'),
-            self::REASON_PRIVATE_IP => Craft::t('link-audit', 'Not safe to request'),
-            self::REASON_RATE_LIMITED => Craft::t('link-audit', 'The host asked us to ease off'),
-            self::REASON_SSL => Craft::t('link-audit', 'A problem with the security certificate'),
-            self::REASON_TIMEOUT => Craft::t('link-audit', 'Timed out'),
-            self::REASON_UNSAFE_SCHEME => Craft::t('link-audit', 'Not an http or https address'),
-            default => $reason,
-        };
-    }
-
-    /**
      * What a response code means, in a sentence an editor can use.
      *
      * Fed to the title attribute on the code badges, so hovering a number
@@ -190,6 +153,43 @@ class Verdict
                 5 => Craft::t('link-audit', 'The server had a problem'),
                 default => Craft::t('link-audit', 'A code outside the usual run of things'),
             },
+        };
+    }
+
+    /**
+     * What a stored reason code is called on screen.
+     *
+     * The codes are developer vocabulary and land in the database as-is; an
+     * editor reading the URL detail page gets these instead. An unrecognised
+     * code (an old row from before a rename, say) is shown as it is stored
+     * rather than hidden.
+     *
+     * @param string|null $reason The stored reason code.
+     * @return string|null The label, or null when there is no reason at all.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public static function reasonLabel(?string $reason): ?string
+    {
+        if ($reason === null || $reason === '') {
+            return null;
+        }
+
+        return match ($reason) {
+            self::REASON_CONNECT => Craft::t('link-audit', 'Could not connect'),
+            self::REASON_DNS => Craft::t('link-audit', 'Could not find that domain'),
+            self::REASON_FRAGMENT => Craft::t('link-audit', 'Missing anchor on the page'),
+            self::REASON_HOST_BACKOFF => Craft::t('link-audit', 'Host asked to be left alone for a while'),
+            self::REASON_HTTP => Craft::t('link-audit', 'The server answered with an error'),
+            self::REASON_IGNORED => Craft::t('link-audit', 'Ignored by a person'),
+            self::REASON_IGNORE_RULE => Craft::t('link-audit', 'Ignored by a rule in the settings'),
+            self::REASON_NO_ELEMENT => Craft::t('link-audit', 'Nothing on this site answers to it'),
+            self::REASON_PRIVATE_IP => Craft::t('link-audit', 'Not safe to request'),
+            self::REASON_RATE_LIMITED => Craft::t('link-audit', 'The host asked us to ease off'),
+            self::REASON_SSL => Craft::t('link-audit', 'A problem with the security certificate'),
+            self::REASON_TIMEOUT => Craft::t('link-audit', 'Timed out'),
+            self::REASON_UNSAFE_SCHEME => Craft::t('link-audit', 'Not an http or https address'),
+            default => $reason,
         };
     }
 

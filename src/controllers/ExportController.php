@@ -6,9 +6,12 @@
 
 namespace johnhenry\linkaudit\controllers;
 
+use Craft;
 use Generator;
 use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\LinkAudit;
+use johnhenry\linkaudit\services\ExportService;
+use Throwable;
 use yii\base\InvalidConfigException;
 use yii\web\ForbiddenHttpException;
 use yii\web\Response;
@@ -17,9 +20,12 @@ use yii\web\Response;
  * The Download CSV button behind every list screen.
  *
  * The same question the list is asking, answered as a file instead of a table.
- * The verdict, the filters and the site all come off the request exactly as the
- * table endpoint reads them, so what lands in the download is what was on the
- * screen the reader pressed the button on, and nothing else.
+ * The verdict, the filters, the search and the site all come off the request
+ * exactly as the table endpoint reads them, so what lands in the download is
+ * what was on the screen the reader pressed the button on, and nothing else.
+ * The search is the odd one out only in how it gets here: it belongs to the
+ * table component rather than to the filter bar, so the screen's own JavaScript
+ * puts it on the button's link as it is typed.
  *
  * The file is streamed rather than built. A CSV assembled in memory and then
  * handed over works beautifully on a development site with forty broken links
@@ -56,6 +62,12 @@ class ExportController extends BaseController
         $status = UrlStatus::tryFrom((string)$this->request->getParam('verdict', '')) ?? UrlStatus::Broken;
         $siteId = $this->resolveSiteId($this->request->getParam('siteId'));
         $filters = $this->reportFilters();
+        // The free text search is not one of the bookmarkable filters: it lives
+        // inside the table component, and the button's link is rewritten with it
+        // by the screen's own JavaScript as it is typed. Read the same way the
+        // table endpoint reads it, so a download and the rows it was pressed
+        // over cannot disagree.
+        $filters['search'] = trim((string)($this->request->getParam('search') ?? ''));
         $export = LinkAudit::$plugin->getExportService();
 
         $response = $this->response;
@@ -72,8 +84,47 @@ class ExportController extends BaseController
         // the response is actually being sent. Yii walks whatever this returns
         // and echoes each piece as it comes, which is the whole point: the
         // export never exists in one place at one time.
-        $response->stream = static fn(): Generator => $export->csv($status, [$siteId], $filters);
+        $response->stream = static fn(): Generator => self::_stream($export, $status, $siteId, $filters);
 
         return $response;
+    }
+
+    // =========================================================================
+    // Private Methods
+    // =========================================================================
+
+    /**
+     * The file, in chunks, with nothing allowed out of it but chunks.
+     *
+     * By the time this runs the response has gone: the headers said 200 and
+     * `text/csv`, and the browser is already writing what it has been handed to
+     * a file. An exception escaping here would put Craft's error page down the
+     * same pipe, so the reader would open a spreadsheet and find a page of HTML
+     * at the bottom of it, under a name and a status that both say the download
+     * worked.
+     *
+     * A truncated file is the better failure. It is obvious, it says nothing
+     * untrue, and the real exception goes in the log where somebody can act on
+     * it.
+     *
+     * @param ExportService $export The export service.
+     * @param UrlStatus $status The verdict being exported.
+     * @param int $siteId The site to read references on.
+     * @param array<string, mixed> $filters The filters from the request.
+     * @return Generator<int, string> The file, in chunks.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private static function _stream(
+        ExportService $export,
+        UrlStatus $status,
+        int $siteId,
+        array $filters,
+    ): Generator {
+        try {
+            yield from $export->csv($status, [$siteId], $filters);
+        } catch (Throwable $e) {
+            Craft::error('Could not finish the CSV export: ' . $e->getMessage(), 'link-audit');
+        }
     }
 }
