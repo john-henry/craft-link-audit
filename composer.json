@@ -27,7 +27,10 @@
   },
   "require-dev": {
     "craftcms/ecs": "dev-main",
-    "craftcms/phpstan": "dev-main"
+    "craftcms/html-field": "^1.0 || ^2.0 || ^3.0",
+    "craftcms/phpstan": "dev-main",
+    "verbb/hyper": "^2.0 || ^3.0",
+    "verbb/navigation": "^3.0"
   },
   "suggest": {
     "craftcms/ckeditor": "Links in CKEditor content are read from the stored HTML, nested entries and all",
