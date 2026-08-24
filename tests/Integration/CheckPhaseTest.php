@@ -401,7 +401,7 @@ it('answers an internal URL a live element holds out of the database rather than
         ->and(laCheckUrlRow($urlId)['status'])->toBe(UrlStatus::Ok->value);
 });
 
-it('answers an internal URL a disabled element holds out of the database, without asking the server', function() {
+it('asks the server about a URL a disabled element holds, because a redirect may be answering for it', function() {
     LinkAudit::getInstance()->getSettings()->minHostDelayMs = 0;
 
     $entry = laCheckFixtureEntry(enabled: false);
@@ -414,18 +414,21 @@ it('answers an internal URL a disabled element holds out of the database, withou
     );
 
     $sent = [];
-    laMockChecker(static fn(): Response => new Response(404), $sent);
+    laMockChecker(
+        static fn(RequestInterface $request): Response => str_contains((string)$request->getUri(), $entry->slug)
+            ? new Response(301, ['Location' => $baseUrl . '/la-fixture/somewhere-live'])
+            : new Response(200),
+        $sent,
+    );
 
     $checked = LinkAudit::getInstance()->getScanService()->checkChunk([laCheckUrlRow($urlId)]);
 
-    // The server would answer that address with a 404 that says less than the
-    // database already knows, so it is not asked and the author is told which
-    // page it is and what is wrong with it.
-    expect($sent)->toBe([])
+    // Retiring a page by disabling its entry and putting a redirect over the
+    // address is ordinary housekeeping, so the disabled match settles nothing:
+    // the server gets the last word, and here its word is a redirect.
+    expect($sent)->not->toBe([])
         ->and($checked)->toBe(1)
-        ->and(laCheckUrlRow($urlId)['status'])->toBe(UrlStatus::Broken->value)
-        ->and(laCheckUrlRow($urlId)['reason'])->toBe(Verdict::REASON_NO_ELEMENT)
-        ->and((string)laCheckUrlRow($urlId)['message'])->toContain('disabled');
+        ->and(laCheckUrlRow($urlId)['status'])->toBe(UrlStatus::Redirect->value);
 });
 
 it('reports an internal URL a redirect rule answers for as a redirect, not as broken', function() {
