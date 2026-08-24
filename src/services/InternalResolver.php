@@ -127,7 +127,13 @@ class InternalResolver extends Component
      * the element is gone, it is switched off, or, for an authored hyperlink
      * only, it is there and enabled but has no URL to send anybody to.
      *
-     * That last check is skipped for a relation. A relation field only ever
+     * One of those has an exception. An authored link to a disabled target
+     * that still has a URL is not judged here at all: the template renders
+     * that address whether the entry is enabled or not, and a redirect put
+     * over a retired page answers it, so the link is left for the check
+     * phase and the server gets the last word.
+     *
+     * The no-URL check is skipped for a relation. A relation field only ever
      * asserts that an element was picked, never that it renders a link, so an
      * entry with no URL of its own, a data-only row a template reads inline
      * rather than links to, is not a defect: it is answered as soon as it is
@@ -142,7 +148,8 @@ class InternalResolver extends Component
      *                         than an authored hyperlink, so a target with no
      *                         URL of its own is left alone rather than called
      *                         broken.
-     * @return Verdict The verdict.
+     * @return Verdict|null The verdict, or null when only a request can
+     *                      answer and the link is left for the check phase.
      * @author John Henry Donovan
      * @since 1.0.0
      */
@@ -151,7 +158,7 @@ class InternalResolver extends Component
         ?string $elementType,
         int $siteId,
         bool $isRelation = false,
-    ): Verdict {
+    ): ?Verdict {
         if (!$this->_settings()->checkInternalLinks) {
             return new Verdict(status: UrlStatus::Ignored);
         }
@@ -167,6 +174,16 @@ class InternalResolver extends Component
         }
 
         if (!$element->enabled || $element->getEnabledForSite($siteId) === false) {
+            // A disabled target that still carries a URL settles nothing for an
+            // authored link: the template renders that address either way, and
+            // a redirect put over a retired page answers it. The server gets
+            // the last word. A relation is not a rendered address, so for one
+            // of those the disabled target is the whole answer, and a target
+            // with no URL leaves nothing to ask the server about.
+            if (!$isRelation && $element->getUrl() !== null) {
+                return null;
+            }
+
             return $this->_broken('What this points at is disabled on this site, so nobody can see it.');
         }
 

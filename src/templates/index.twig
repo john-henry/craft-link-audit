@@ -120,6 +120,11 @@
             border-inline-start: 4px solid var(--notice-color);
         }
         #link-audit-progress h2 { display: flex; align-items: center; gap: 10px; }
+        /* The pane's blue tint sits behind an otherwise translucent button and
+           muddies the label; an opaque base keeps the contrast. */
+        #link-audit-cancel-scan .btn { background-color: var(--white); }
+        #link-audit-cancel-scan .btn:hover { background-color: var(--gray-050); }
+        #link-audit-cancel-scan { margin-top: var(--l); }
         {% endcss %}
         <div class="pane" id="link-audit-progress">
             <h2>
@@ -155,7 +160,7 @@
                     {{ csrfInput() }}
                     {{ actionInput('link-audit/scans/cancel') }}
                     {{ redirectInput('link-audit?site=' ~ siteHandle) }}
-                    <button type="submit" class="btn caution">
+                    <button type="submit" class="btn">
                         <span class="label">{{ 'Stop this scan'|t('link-audit') }}</span>
                         <div class="spinner spinner-absolute"></div>
                     </button>
@@ -292,12 +297,16 @@
         </div>
 
         {% if latestScan %}
+            {% set lastScanStopped = latestScan.status == 'cancelled' %}
             <div class="pane" id="link-audit-last-scan">
                 <h2>{{ 'Last scan'|t('link-audit') }}</h2>
+                {% if lastScanStopped %}
+                    <p class="light">{{ 'This run was stopped before it finished. The counts cover what it got through.'|t('link-audit') }}</p>
+                {% endif %}
                 <table class="data fullwidth">
                     <tbody>
                         <tr>
-                            <th scope="row">{{ 'Finished'|t('link-audit') }}</th>
+                            <th scope="row">{{ lastScanStopped ? 'Stopped'|t('link-audit') : 'Finished'|t('link-audit') }}</th>
                             <td>
                                 {% if latestScan.dateFinished %}
                                     {{ latestScan.dateFinished|datetime('short') }}

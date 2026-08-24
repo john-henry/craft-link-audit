@@ -216,11 +216,13 @@ class ScanService extends Component
             $verdict = $this->_resolveStored($row);
 
             if ($verdict === null) {
-                // An internal URL no element and no route accounts for: the
-                // database has nothing more to say, so it is judged the same way
-                // an external URL is, own-host throttling included, since the
-                // scheduler treats every host alike.
-                $external[(string)$row['url']] = (int)$row['id'];
+                // An internal URL the database cannot answer for: it has
+                // nothing more to say, so the row is judged the same way an
+                // external URL is, own-host throttling included, since the
+                // scheduler treats every host alike. A stand-in row swaps in
+                // its target's real address first, because a server cannot be
+                // asked about `element:<id>`.
+                $external[$this->_fetchUrlFor($row)] = (int)$row['id'];
 
                 continue;
             }
@@ -1414,6 +1416,39 @@ class ScanService extends Component
         }
 
         return $resolver->resolveUrl($url, $siteId);
+    }
+
+    /**
+     * The address the check phase should request for a row it is sending out.
+     *
+     * Almost always the row's own URL. The one exception is a stand-in
+     * `element:<id>` row whose target has picked up a URL of its own since the
+     * row was keyed: when the resolver leaves such a row to the server, the
+     * server has to be asked about the target's real address, since a stand-in
+     * is not a fetchable URL. The next extraction stores the link under the
+     * real address anyway, and the orphan sweep retires the stand-in row.
+     *
+     * @param array<string, mixed> $row The URL row.
+     * @return string The URL to request.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _fetchUrlFor(array $row): string
+    {
+        $url = (string)$row['url'];
+        $standInScheme = ExtractedLink::standInScheme($url);
+
+        if ($standInScheme === null) {
+            return $url;
+        }
+
+        $siteId = isset($row['siteId'])
+            ? (int)$row['siteId']
+            : Craft::$app->getSites()->getPrimarySite()->id;
+        $elementId = (int)substr($url, strlen($standInScheme) + 1);
+        $element = Craft::$app->getElements()->getElementById($elementId, null, $siteId);
+
+        return $element?->getUrl() ?? $url;
     }
 
     /**
