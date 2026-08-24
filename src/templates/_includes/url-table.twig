@@ -93,10 +93,10 @@
     (function() {
         'use strict';
 
-        // Vue replaces the mount element with its own rendered DOM, so click
-        // listeners must sit on this outer wrapper, which Vue never touches.
-        // Listening on the mount element itself leaves the listeners on a
-        // detached node and every button on the table plays dead.
+        // Vue replaces the mount element with its own rendered DOM, so every
+        // delegated listener must sit on this outer wrapper, which Vue never
+        // touches. Listening on the mount element itself leaves the listeners
+        // on a detached node and every button on the table plays dead.
         var container = document.getElementById('link-audit-table-wrap');
         var isRedirects = {{ (verdict == 'redirect') ? 'true' : 'false' }};
         var canAct = {{ (canRecheck or canIgnore) ? 'true' : 'false' }};
@@ -174,9 +174,9 @@
         // A redirect is followed to wherever it lands, so the code on the row is
         // the last hop's and reads as a plain green 200 with nothing saying the
         // link moved at all. Where the first hop's own code was recorded, both
-        // are drawn: what the address answered, then where it ended up. A row
-        // checked before that code was kept carries none, and reads as it
-        // always did until its next check.
+        // are drawn: what the address answered, then where it ended up. Not
+        // every row carries that first code, and one that does not draws the
+        // landing code on its own.
         function codeCell(value) {
             if (!value || !value.status) {
                 return '';

@@ -359,8 +359,8 @@ class ExportService extends Component
      *
      * Loaded by type rather than one at a time. Asking Craft for an element
      * without naming its class costs a lookup query before the read, so a batch
-     * of five hundred references was a thousand queries; grouping the ids by the
-     * type stored against them turns the whole batch into one query for the
+     * of five hundred references would be a thousand queries; grouping the ids
+     * by the type stored against them turns the whole batch into one query for the
      * types and one per type and site after it. The result is a local, so it
      * goes when the batch does and an export of a hundred thousand references
      * never holds more than a batch of pages at a time.
@@ -389,10 +389,7 @@ class ExportService extends Component
             return [];
         }
 
-        $types = $this->_elementTypes(array_values(array_map(
-            static fn(array $want): int => $want['id'],
-            $wanted,
-        )));
+        $types = $this->_elementTypes(array_column($wanted, 'id'));
         $groups = [];
 
         foreach ($wanted as $want) {

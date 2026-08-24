@@ -101,9 +101,10 @@ class Verdict
     public const REASON_TIMEOUT = 'timeout';
 
     /**
-     * The URL is unparseable, or uses a scheme that is never fetched. Normally
-     * caught during normalisation, so this only shows up when a URL row predates
-     * a rule change.
+     * The URL is unparseable, or uses a scheme that is never fetched.
+     * Normalisation refuses most of these before they are ever stored, so this
+     * is the backstop for a row that got past it and is only refused when the
+     * check phase reaches for it.
      */
     public const REASON_UNSAFE_SCHEME = 'unsafe-scheme';
 
@@ -160,9 +161,9 @@ class Verdict
      * What a stored reason code is called on screen.
      *
      * The codes are developer vocabulary and land in the database as-is; an
-     * editor reading the URL detail page gets these instead. An unrecognised
-     * code (an old row from before a rename, say) is shown as it is stored
-     * rather than hidden.
+     * editor reading the URL detail page gets these instead. A code with no
+     * label of its own is shown exactly as it is stored rather than hidden,
+     * since a stored row can carry a code this version knows nothing about.
      *
      * @param string|null $reason The stored reason code.
      * @return string|null The label, or null when there is no reason at all.

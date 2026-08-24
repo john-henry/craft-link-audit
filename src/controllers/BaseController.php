@@ -18,12 +18,14 @@ use yii\web\NotFoundHttpException;
 /**
  * Shared structure for every control panel screen the plugin has.
  *
- * Two things live here rather than in each controller. The permission handles,
+ * Three things live here rather than in each controller. The permission handles,
  * because a handle is a contract string used by the registration, the nav item
  * and the gate alike, and a bare literal in three places drifts silently: a typo
  * still passes for an admin, who holds every permission, and refuses everybody
- * else. And the site fence, because a report is only ever read for one site at a
- * time and every screen has to arrive at that site the same way.
+ * else. The site fence, because a report is only ever read for one site at a
+ * time and every screen has to arrive at that site the same way. And the strings
+ * the screens' own JavaScript asks `Craft.t()` for, because a category nothing
+ * has been registered under translates to nothing at all.
  *
  * Reading a report needs `viewReports`, so that is checked once here rather than
  * at the top of a dozen actions. Anything that changes something asks for more

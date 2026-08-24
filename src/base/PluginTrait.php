@@ -235,10 +235,10 @@ trait PluginTrait
      * Hangs the verdict counts off the navigation item and its subnav.
      *
      * The section's own badge is the broken count, since that is the only one of
-     * the four that is work somebody has to do; the others sit beside the screen
-     * that lists them. Redirects counts the permanent ones only, for the same
-     * reason: a temporary redirect is the far end's business, a permanent one is
-     * an address the content still holds after it moved.
+     * them that is work somebody has to do; the rest sit beside the screen that
+     * lists them. Redirects counts the permanent ones only, for the same reason:
+     * a temporary redirect is the far end's business, a permanent one is an
+     * address the content still holds after it moved.
      *
      * Scoped to the site the control panel is currently on, which is the site
      * every one of these links already carries, so a badge cannot promise a

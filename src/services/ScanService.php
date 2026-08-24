@@ -369,8 +369,8 @@ class ScanService extends Component
                 $urlId = $store->upsert($link->url, $link->isInternal(), $link->siteId, $link->initialStatus());
                 // Grouped under the site being extracted, never the link's own
                 // site: a reference tag pinned to another site (`{entry:29@1:url}`
-                // met while reading site 2) still sits on THIS site's page, and
-                // filing it under site 1 would hand the whole of site 1's
+                // met while reading site 2) still sits on the page being read,
+                // and filing it under site 1 would hand the whole of site 1's
                 // reference set to a replace call carrying one row.
                 $refs["$link->elementId:$siteId"][] = $link->toReference($urlId, $scanId);
                 // An ignore rule is asked first, so a URL nobody wants checked
@@ -1263,8 +1263,8 @@ class ScanService extends Component
      * {@see ExtractedLink::standInScheme()}, rather than off the row's own
      * `scheme` column: that column is written by a URL parser that is not being
      * asked a question it can safely answer here, see that method for why, so the
-     * column may hold nothing usable on a stand-in row. Reading the URL means any
-     * such row resolves correctly on its next recheck, with no backfill needed.
+     * column may hold nothing usable on a stand-in row. The URL always carries
+     * the scheme, so it is the one source that can be trusted on every row.
      *
      * @param array<string, mixed> $row The URL row.
      * @return Verdict|null The verdict, or null when the row is a file-shaped
