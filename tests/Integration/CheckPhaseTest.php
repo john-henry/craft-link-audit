@@ -90,6 +90,31 @@ function laCheckNoUrlEntry(): Entry
         ->create();
 }
 
+/**
+ * An entry in the laFixture section, which serves URLs at la-fixture/{slug}, so
+ * the check phase has a real address of this installation's own to resolve out
+ * of the database rather than over HTTP.
+ */
+function laCheckFixtureEntry(bool $enabled = true): Entry
+{
+    $section = Craft::$app->getEntries()->getSectionByHandle('laFixture');
+
+    if ($section === null) {
+        throw new RuntimeException(
+            'The laFixture test section is missing. Run `ddev craft project-config/apply`.',
+        );
+    }
+
+    $slug = 'check-fixture-' . StringHelper::toLowerCase(StringHelper::randomString(10));
+
+    return EntryFactory::factory()
+        ->section($section)
+        ->title('Check phase fixture ' . $slug)
+        ->slug($slug)
+        ->enabled($enabled)
+        ->create();
+}
+
 /** A scan row for the check phase to count against. */
 function laCheckScan(): int
 {
@@ -354,7 +379,121 @@ it('leaves a URL the host asked to be left alone still pending, and does not ask
         ->and((int)laCheckScanRow($scanId)['urlsChecked'])->toBe(0);
 });
 
-it('answers an internal URL out of the database rather than over HTTP', function() {
+it('answers an internal URL a live element holds out of the database rather than over HTTP', function() {
+    LinkAudit::getInstance()->getSettings()->minHostDelayMs = 0;
+
+    $entry = laCheckFixtureEntry();
+    $urlId = LinkAudit::getInstance()->getUrlStore()->upsert(
+        (string)$entry->getUrl(),
+        true,
+        (int)$entry->siteId,
+    );
+
+    $sent = [];
+    laMockChecker(static fn(): Response => new Response(404), $sent);
+
+    $checked = LinkAudit::getInstance()->getScanService()->checkChunk([laCheckUrlRow($urlId)]);
+
+    // Left pending it would be offered on every pass for ever and settled by
+    // none of them, which is what a real scan turned up.
+    expect($sent)->toBe([])
+        ->and($checked)->toBe(1)
+        ->and(laCheckUrlRow($urlId)['status'])->toBe(UrlStatus::Ok->value);
+});
+
+it('answers an internal URL a disabled element holds out of the database, without asking the server', function() {
+    LinkAudit::getInstance()->getSettings()->minHostDelayMs = 0;
+
+    $entry = laCheckFixtureEntry(enabled: false);
+    $siteId = Craft::$app->getSites()->getPrimarySite()->id;
+    $baseUrl = rtrim((string)Craft::$app->getSites()->getPrimarySite()->getBaseUrl(), '/');
+    $urlId = LinkAudit::getInstance()->getUrlStore()->upsert(
+        $baseUrl . '/la-fixture/' . $entry->slug,
+        true,
+        $siteId,
+    );
+
+    $sent = [];
+    laMockChecker(static fn(): Response => new Response(404), $sent);
+
+    $checked = LinkAudit::getInstance()->getScanService()->checkChunk([laCheckUrlRow($urlId)]);
+
+    // The server would answer that address with a 404 that says less than the
+    // database already knows, so it is not asked and the author is told which
+    // page it is and what is wrong with it.
+    expect($sent)->toBe([])
+        ->and($checked)->toBe(1)
+        ->and(laCheckUrlRow($urlId)['status'])->toBe(UrlStatus::Broken->value)
+        ->and(laCheckUrlRow($urlId)['reason'])->toBe(Verdict::REASON_NO_ELEMENT)
+        ->and((string)laCheckUrlRow($urlId)['message'])->toContain('disabled');
+});
+
+it('reports an internal URL a redirect rule answers for as a redirect, not as broken', function() {
+    LinkAudit::getInstance()->getSettings()->minHostDelayMs = 0;
+
+    // The Retour case: a rule the plugin cannot see, /team/(.*) sent to
+    // /people/$1 with a 301. Nothing in the database answers to the old
+    // address, and the link still works, so the editor is owed the new one.
+    $siteId = Craft::$app->getSites()->getPrimarySite()->id;
+    $baseUrl = rtrim((string)Craft::$app->getSites()->getPrimarySite()->getBaseUrl(), '/');
+    $urlId = LinkAudit::getInstance()->getUrlStore()->upsert(
+        $baseUrl . '/team/norma-swenson',
+        true,
+        $siteId,
+    );
+
+    $sent = [];
+    laMockChecker(
+        static fn(RequestInterface $request): Response => str_contains(
+            (string)$request->getUri(),
+            '/team/',
+        )
+            ? new Response(301, ['Location' => $baseUrl . '/people/norma-swenson'])
+            : new Response(200),
+        $sent,
+    );
+
+    LinkAudit::getInstance()->getScanService()->checkChunk([laCheckUrlRow($urlId)]);
+    $row = laCheckUrlRow($urlId);
+
+    expect($sent)->toHaveCount(2)
+        ->and($row['status'])->toBe(UrlStatus::Redirect->value)
+        ->and((bool)$row['redirectPermanent'])->toBeTrue()
+        ->and((int)$row['redirectStatus'])->toBe(301)
+        ->and($row['finalUrl'])->toBe($baseUrl . '/people/norma-swenson');
+});
+
+it('reports an internal URL answered by a temporary redirect as a temporary one', function() {
+    LinkAudit::getInstance()->getSettings()->minHostDelayMs = 0;
+
+    $siteId = Craft::$app->getSites()->getPrimarySite()->id;
+    $baseUrl = rtrim((string)Craft::$app->getSites()->getPrimarySite()->getBaseUrl(), '/');
+    $urlId = LinkAudit::getInstance()->getUrlStore()->upsert(
+        $baseUrl . '/team/temporarily-elsewhere',
+        true,
+        $siteId,
+    );
+
+    $sent = [];
+    laMockChecker(
+        static fn(RequestInterface $request): Response => str_contains(
+            (string)$request->getUri(),
+            '/team/',
+        )
+            ? new Response(302, ['Location' => $baseUrl . '/people/temporarily-elsewhere'])
+            : new Response(200),
+        $sent,
+    );
+
+    LinkAudit::getInstance()->getScanService()->checkChunk([laCheckUrlRow($urlId)]);
+    $row = laCheckUrlRow($urlId);
+
+    expect($row['status'])->toBe(UrlStatus::Redirect->value)
+        ->and((bool)$row['redirectPermanent'])->toBeFalse()
+        ->and((int)$row['redirectStatus'])->toBe(302);
+});
+
+it('calls an internal URL nothing answers for broken on the server\'s own answer', function() {
     LinkAudit::getInstance()->getSettings()->minHostDelayMs = 0;
 
     $siteId = Craft::$app->getSites()->getPrimarySite()->id;
@@ -366,15 +505,16 @@ it('answers an internal URL out of the database rather than over HTTP', function
     );
 
     $sent = [];
-    laMockChecker(static fn(): Response => new Response(200), $sent);
+    laMockChecker(static fn(): Response => new Response(404), $sent);
 
     $checked = LinkAudit::getInstance()->getScanService()->checkChunk([laCheckUrlRow($urlId)]);
+    $row = laCheckUrlRow($urlId);
 
-    // Left pending it would be offered on every pass for ever and settled by
-    // none of them, which is what a real scan turned up.
-    expect($sent)->toBe([])
+    expect($sent)->toHaveCount(1)
         ->and($checked)->toBe(1)
-        ->and(laCheckUrlRow($urlId)['status'])->toBe(UrlStatus::Broken->value);
+        ->and($row['status'])->toBe(UrlStatus::Broken->value)
+        ->and($row['reason'])->toBe(Verdict::REASON_HTTP)
+        ->and((int)$row['httpStatus'])->toBe(404);
 });
 
 it('checks a file-shaped internal URL over HTTP instead of by database lookup', function() {

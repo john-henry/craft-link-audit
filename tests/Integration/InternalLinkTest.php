@@ -91,29 +91,30 @@ it('says a URL matching a live entry is fine', function() {
         ->and($verdict->reason)->toBeNull();
 });
 
-it('calls a URL matching a disabled entry broken', function() {
+it('calls a URL matching a disabled entry broken, and says it is disabled', function() {
     $entry = ilEntry(enabled: false);
     $verdict = ilResolver()->resolveUrl(ilUrl("la-fixture/$entry->slug"), ilSiteId());
 
     expect($verdict->status)->toBe(UrlStatus::Broken)
-        ->and($verdict->reason)->toBe(Verdict::REASON_NO_ELEMENT);
+        ->and($verdict->reason)->toBe(Verdict::REASON_NO_ELEMENT)
+        ->and($verdict->message)->toContain('disabled');
 });
 
-it('calls a URL matching nothing at all broken', function() {
+it('leaves a URL matching nothing at all pending for the check phase, instead of calling it broken', function() {
+    // A redirect rule, a rewrite or a CDN can be answering for an address no
+    // element and no route knows about, so the server gets the last word.
     $verdict = ilResolver()->resolveUrl(ilUrl('la-fixture/nothing-lives-here-at-all'), ilSiteId());
 
-    expect($verdict->status)->toBe(UrlStatus::Broken)
-        ->and($verdict->reason)->toBe(Verdict::REASON_NO_ELEMENT)
-        ->and($verdict->message)->not->toBeNull();
+    expect($verdict)->toBeNull();
 });
 
 it('reads the homepage as the token Craft stores for it', function() {
     $verdict = ilResolver()->resolveUrl(ilUrl(''), ilSiteId());
 
     // Whether the homepage has an element behind it depends on the site, so the
-    // only safe assertion is that it was answered without being called broken
-    // for the wrong reason.
-    expect($verdict->status)->toBeIn([UrlStatus::Ok, UrlStatus::Broken]);
+    // only safe assertion is that it was either answered as fine or left for the
+    // server, never called broken off a lookup that read the URI wrong.
+    expect($verdict === null || $verdict->status === UrlStatus::Ok)->toBeTrue();
 });
 
 it('lets an always valid pattern through instead of calling it broken', function() {
@@ -131,12 +132,11 @@ it('ignores an always valid pattern that does not match', function() {
         ['pattern' => '^downloads/'],
     ];
 
-    // A path with no extension, so the pattern is what is under test rather
-    // than the file-shaped predicate a URL like uploads/brochure.pdf would
-    // also trip.
     $verdict = ilResolver()->resolveUrl(ilUrl('uploads/nothing-lives-here'), ilSiteId());
 
-    expect($verdict->status)->toBe(UrlStatus::Broken);
+    // Not ignored, so the pattern did not claim it. What it is instead is the
+    // server's business.
+    expect($verdict)->toBeNull();
 });
 
 it('does not fall over on a malformed always valid pattern', function() {
@@ -231,9 +231,12 @@ it('keeps a site scoped route to the site it was defined for', function() {
     $store = Craft::$app->getSites()->getSiteByHandle('spokeChain');
     $storeUrl = rtrim((string)$store->getBaseUrl(), '/') . '/account/orders/1000';
 
+    // The route answers on its own site and on no other, so the same path on the
+    // primary site is not settled here at all: it goes to the check phase like
+    // any other address the database cannot account for.
     expect(ilResolver()->resolveUrl($storeUrl, (int)$store->id)->status)->toBe(UrlStatus::Ok)
-        ->and(ilResolver()->resolveUrl(ilUrl('account/orders/1000'), ilSiteId())->status)
-        ->toBe(UrlStatus::Broken);
+        ->and(ilResolver()->resolveUrl(ilUrl('account/orders/1000'), ilSiteId()))
+        ->toBeNull();
 })->skip(
     fn() => Craft::$app->getSites()->getSiteByHandle('spokeChain') === null,
     'This project has no second site with a site scoped route to resolve against.',
@@ -402,6 +405,22 @@ it('resolves an extracted internal link end to end', function() {
     );
 
     expect(ilResolver()->resolve($link)?->status)->toBe(UrlStatus::Ok);
+});
+
+it('leaves an extracted internal link pending when nothing in the database accounts for it', function() {
+    $link = new ExtractedLink(
+        kind: LinkKind::Internal,
+        elementId: 1,
+        elementType: Entry::class,
+        ownerElementId: 1,
+        siteId: ilSiteId(),
+        url: ilUrl('team/somebody'),
+        rawHref: '/team/somebody',
+    );
+
+    // Extraction runs per element and settles nothing over HTTP, so an address
+    // only the server can speak for comes out of it with no verdict at all.
+    expect(ilResolver()->resolve($link))->toBeNull();
 });
 
 it('resolves an extracted element link end to end', function() {

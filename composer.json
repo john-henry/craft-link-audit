@@ -2,7 +2,7 @@
   "name": "johnhenry/craft-link-audit",
   "description": "Finds broken links across your content, checks each unique URL once, and tells you exactly which entries to fix",
   "type": "craft-plugin",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "keywords": [
     "craft",
     "cms",

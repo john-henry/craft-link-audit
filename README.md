@@ -46,7 +46,9 @@ Stored field values, not rendered pages:
 
 Because it reads stored values, it sees links on entries that have no public URL, and it can tell
 you which field a link came from. Internal links are resolved against your own elements and routes
-rather than fetched over HTTP.
+rather than fetched over HTTP, and whatever those cannot answer for is asked for over HTTP, so a
+redirect rule in Retour or in your server config counts as the redirect it is rather than as a broken
+link.
 
 There is a rendered crawl mode as well, for links hard-coded into templates. It is off by default,
 because fetching every page is the expensive way to do it.
