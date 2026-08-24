@@ -15,11 +15,13 @@ use craft\helpers\Db;
 use johnhenry\linkaudit\enums\ScanMode;
 use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\exceptions\ScanInProgressException;
+use johnhenry\linkaudit\helpers\QueueJobs;
 use johnhenry\linkaudit\LinkAudit;
 use johnhenry\linkaudit\records\ReferenceRecord;
 use johnhenry\linkaudit\records\ScanRecord;
 use johnhenry\linkaudit\records\UrlRecord;
 use Throwable;
+use yii\base\InvalidConfigException;
 use yii\console\Exception as ConsoleException;
 use yii\console\ExitCode;
 
@@ -32,7 +34,9 @@ use yii\console\ExitCode;
  *   php craft link-audit/scan/element --element-id=42
  *   php craft link-audit/scan/check-pending
  *   php craft link-audit/scan/recheck-broken
+ *   php craft link-audit/scan/cancel
  *   php craft link-audit/scan/prune --days=90
+ *   php craft link-audit/scan/reset --force
  *   php craft link-audit/scan/report
  *
  * The scanning commands queue work rather than doing it, so a scan of a large
@@ -65,6 +69,12 @@ class ScanController extends Controller
     public ?int $elementId = null;
 
     /**
+     * @var bool Skip the confirmation on a reset, for a script that has nobody
+     * sitting in front of it.
+     */
+    public bool $force = false;
+
+    /**
      * @var string|null The handle of the site to cover. Every site when it is
      * not given.
      */
@@ -86,6 +96,42 @@ class ScanController extends Controller
     public function actionAll(): int
     {
         return $this->_queue(ScanMode::Full);
+    }
+
+    /**
+     * Calls off the run that is going, and takes its queued work out of the
+     * queue.
+     *
+     * @return int The exit code.
+     * @throws InvalidConfigException If the queue component cannot be resolved.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function actionCancel(): int
+    {
+        // Counted before rather than after, because by the time the cancel comes
+        // back the jobs it released are gone and there is nothing left to count.
+        $queued = QueueJobs::count();
+        $scan = LinkAudit::$plugin->getScanService()->cancelScan();
+
+        if ($scan === null) {
+            $this->stdout("Nothing is running, so there was nothing to call off.\n", Console::FG_YELLOW);
+
+            return ExitCode::OK;
+        }
+
+        $this->stdout(sprintf(
+            "Cancelled scan %d (%s): released %d queued job(s).\n",
+            $scan->id,
+            $scan->mode,
+            $queued,
+        ), Console::FG_GREEN);
+        $this->stdout(
+            "Everything it had already checked keeps its verdict. The content it never\n"
+            . "reached is read by the next scan.\n",
+        );
+
+        return ExitCode::OK;
     }
 
     /**
@@ -254,6 +300,52 @@ class ScanController extends Controller
     }
 
     /**
+     * Empties every scan result and leaves the ignores where they are.
+     *
+     * There is no button for this anywhere in the control panel, deliberately.
+     * It is the sort of thing somebody does once after changing what gets
+     * scanned, with a backup behind them, and a screen full of report is not
+     * where it belongs.
+     *
+     * @return int The exit code.
+     * @throws InvalidConfigException If the queue component cannot be resolved.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function actionReset(): int
+    {
+        // Console::confirm() rather than the controller's own confirm(), which
+        // answers yes to everything when the command is run with
+        // --interactive=0. A destructive command that says yes on somebody's
+        // behalf is exactly what --force is for.
+        if (!$this->force && !Console::confirm($this->_resetWarning())) {
+            $this->stdout("Left everything as it was.\n", Console::FG_YELLOW);
+
+            return ExitCode::OK;
+        }
+
+        $removed = LinkAudit::$plugin->getScanService()->resetAll();
+
+        $this->_printTable('Rows removed', [
+            'References' => $removed['references'],
+            'URLs' => $removed['urls'],
+            'Scans' => $removed['scans'],
+            'Host records' => $removed['hosts'],
+        ]);
+
+        $this->stdout(
+            "\nYour ignore decisions were kept, and a URL somebody dismissed comes back\n"
+            . "ignored the moment it is found again. Nothing in your content was touched.\n",
+        );
+        $this->stdout(
+            "The next scan rebuilds the lot: run `craft link-audit/scan/all`.\n",
+            Console::FG_GREEN,
+        );
+
+        return ExitCode::OK;
+    }
+
+    /**
      * @inheritdoc
      *
      * @param string $actionID The action being run.
@@ -267,6 +359,7 @@ class ScanController extends Controller
             'all', 'incremental', 'report' => ['site'],
             'element' => ['elementId', 'site'],
             'prune' => ['days'],
+            'reset' => ['force'],
             default => [],
         });
     }
@@ -462,6 +555,27 @@ class ScanController extends Controller
         $counts['-- waiting to be checked'] = (int)LinkAudit::$plugin->getUrlStore()->pendingQuery()->count();
 
         $this->_printTable('URLs by verdict', $counts);
+    }
+
+    /**
+     * What a reset is about to do, said plainly enough to answer no to.
+     *
+     * Spelled out in full rather than summarised: somebody typing this has a
+     * report they are unhappy with, and the one thing they need to be sure of
+     * before pressing return is that their content and their ignore decisions
+     * are not part of the deal.
+     *
+     * @return string The warning.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _resetWarning(): string
+    {
+        return "This deletes every URL, every reference, every scan and every host record\n"
+            . "Link Audit holds, and calls off anything that is running.\n\n"
+            . "Your ignore decisions are kept, and nothing in your content is touched.\n"
+            . "The next scan builds it all again from scratch.\n\n"
+            . 'Go ahead?';
     }
 
     /**

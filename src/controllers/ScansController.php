@@ -33,6 +33,42 @@ class ScansController extends BaseController
     // =========================================================================
 
     /**
+     * Calls off the run that is going.
+     *
+     * Whichever site the reader is looking at, this stops the run itself: a scan
+     * is one job chain across whatever sites it was started for, and there is no
+     * halfway house where it carries on for the other sites. `runScans` is the
+     * gate for that reason, the same permission that started it.
+     *
+     * @return Response A redirect back to wherever the button was.
+     * @throws BadRequestHttpException If the request is not a POST.
+     * @throws ForbiddenHttpException If the user may not run scans.
+     * @throws InvalidConfigException If the queue component cannot be resolved.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function actionCancel(): Response
+    {
+        $this->requirePostRequest();
+        $this->requirePermission(self::PERMISSION_RUN_SCANS);
+
+        $scan = LinkAudit::$plugin->getScanService()->cancelScan();
+
+        if ($scan === null) {
+            $this->setFailFlash(Craft::t('link-audit', 'Nothing was running, so there was nothing to stop.'));
+
+            return $this->redirectToPostedUrl();
+        }
+
+        $this->setSuccessFlash(Craft::t(
+            'link-audit',
+            'The scan has been stopped. Everything it checked before it stopped is on the report as normal, and the next scan reads the rest.',
+        ));
+
+        return $this->redirectToPostedUrl();
+    }
+
+    /**
      * Queues a scan of the site being viewed.
      *
      * One site rather than the lot. The button sits under a site switcher, so

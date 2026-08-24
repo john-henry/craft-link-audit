@@ -12,8 +12,7 @@ use craft\db\Query;
 use craft\db\Table;
 use craft\helpers\Db;
 use craft\helpers\Json;
-use craft\helpers\StringHelper;
-use craft\queue\Queue as CraftQueue;
+use johnhenry\linkaudit\helpers\QueueJobs;
 use johnhenry\linkaudit\LinkAudit;
 use johnhenry\linkaudit\widgets\BrokenLinksWidget;
 use yii\base\InvalidConfigException;
@@ -43,24 +42,6 @@ use yii\base\InvalidConfigException;
  */
 class UninstallService extends Component
 {
-    // =========================================================================
-    // Const Properties
-    // =========================================================================
-
-    /**
-     * @var int How many queue rows are read at a time.
-     *
-     * Small enough that a queue of any size is a bounded amount of memory, big
-     * enough that the read is not a round trip per job.
-     */
-    private const _JOB_BATCH_SIZE = 200;
-
-    /**
-     * @var string The plugin's own namespace, which is how a queued job is told
-     * apart from everybody else's.
-     */
-    private const _JOB_NAMESPACE = 'johnhenry\\linkaudit\\';
-
     // =========================================================================
     // Public Methods
     // =========================================================================
@@ -184,27 +165,10 @@ class UninstallService extends Component
     /**
      * Releases every queued job belonging to the plugin.
      *
-     * Craft's queue holds each job as a serialised object, and a serialised
-     * object carries its class name in plain sight, so the rows are read and
-     * matched here in PHP. The two obvious alternatives are both worse: asking
-     * the database with a LIKE means matching against a column that is a blob
-     * on MySQL and a bytea on Postgres, which the two do not answer the same
-     * way, and asking Craft for each job's details unserialises every job in
-     * the queue to read one string off it.
-     *
-     * Matching the bytes could in theory take a job of somebody else's that
-     * happens to carry one of our class names in a property of its own. Nobody
-     * writes that job, and if they did, it names a class that is about to stop
-     * existing.
-     *
-     * A queue driver that is not Craft's own database one is left alone. There
-     * is no table to read, and a plugin has no business guessing at whatever
-     * has been configured in its place.
-     *
-     * Read a batch at a time rather than all at once. A queue on a busy install
-     * is tens of thousands of rows and every one of them carries a serialised
-     * object in a blob, so reading the table whole is the whole queue in memory
-     * at once, and it happens inside the transaction the uninstall opened.
+     * The finding of them lives in {@see QueueJobs}, because cancelling a scan
+     * wants exactly the same sweep for the opposite reason, and two copies of a
+     * byte match against a serialised blob would drift the day a job class moves
+     * namespace.
      *
      * @return int How many jobs were released.
      * @throws InvalidConfigException If the queue component cannot be resolved.
@@ -213,63 +177,6 @@ class UninstallService extends Component
      */
     public function releaseQueuedJobs(): int
     {
-        $queue = Craft::$app->getQueue();
-
-        if (!$queue instanceof CraftQueue) {
-            return 0;
-        }
-
-        $query = (new Query())
-            ->select(['id', 'job'])
-            ->from($queue->tableName);
-
-        $released = 0;
-
-        foreach ($query->batch(self::_JOB_BATCH_SIZE) as $rows) {
-            foreach ($rows as $row) {
-                if (!str_contains($this->_payload($row['job']), self::_JOB_NAMESPACE)) {
-                    continue;
-                }
-
-                $queue->release((string)$row['id']);
-                $released++;
-            }
-        }
-
-        return $released;
-    }
-
-    // =========================================================================
-    // Private Methods
-    // =========================================================================
-
-    /**
-     * A queued job's stored bytes as a string.
-     *
-     * The column comes back differently depending on the driver and the client:
-     * a string on MySQL, a stream on Postgres, and on some Postgres clients a
-     * hexadecimal rendering of the bytes with an `x` in front of it. Craft
-     * normalises the same three cases before it unserialises a job.
-     *
-     * @param mixed $job The stored column value.
-     * @return string The bytes, or an empty string when they cannot be read.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _payload(mixed $job): string
-    {
-        if (is_resource($job)) {
-            $job = stream_get_contents($job);
-        }
-
-        if (!is_string($job)) {
-            return '';
-        }
-
-        if (str_starts_with($job, 'x') && StringHelper::isHexadecimal(substr($job, 1))) {
-            return (string)hex2bin(substr($job, 1));
-        }
-
-        return $job;
+        return QueueJobs::release();
     }
 }

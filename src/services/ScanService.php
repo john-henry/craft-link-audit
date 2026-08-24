@@ -19,6 +19,7 @@ use johnhenry\linkaudit\enums\ScanMode;
 use johnhenry\linkaudit\enums\ScanStatus;
 use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\exceptions\ScanInProgressException;
+use johnhenry\linkaudit\helpers\QueueJobs;
 use johnhenry\linkaudit\jobs\CheckUrls;
 use johnhenry\linkaudit\jobs\CrawlPages;
 use johnhenry\linkaudit\jobs\ExtractLinks;
@@ -26,11 +27,13 @@ use johnhenry\linkaudit\LinkAudit;
 use johnhenry\linkaudit\models\ExtractedLink;
 use johnhenry\linkaudit\models\SettingsModel;
 use johnhenry\linkaudit\models\Verdict;
+use johnhenry\linkaudit\records\HostRecord;
 use johnhenry\linkaudit\records\ReferenceRecord;
 use johnhenry\linkaudit\records\ScanRecord;
 use johnhenry\linkaudit\records\UrlRecord;
 use Throwable;
 use yii\base\Component;
+use yii\base\InvalidConfigException;
 use yii\db\Expression;
 
 /**
@@ -87,6 +90,64 @@ class ScanService extends Component
     // =========================================================================
     // Public Methods
     // =========================================================================
+
+    /**
+     * Calls off the run that is going, if one is.
+     *
+     * The queued jobs go first. A run marked cancelled whose jobs are still in
+     * the queue is not cancelled at all: the next worker picks up where it left
+     * off and carries on writing to a row that says it stopped. The same sweep
+     * the uninstall uses, so there is one answer to "which of these jobs are
+     * ours".
+     *
+     * Everything already checked keeps its verdict. A verdict belongs to the URL
+     * row and not to the run that happened to find it: the address was asked and
+     * it answered, and calling the run off says nothing about what came back.
+     * What a cancelled run costs is the rest of the content it had not reached
+     * yet, which the next scan reads as a matter of course.
+     *
+     * The same lookup the double-start guard uses, so the two cannot disagree
+     * about what counts as running, and a cancelled row is not one of the
+     * statuses it looks for: the guard frees the moment this returns.
+     *
+     * @return ScanRecord|null The scan that was called off, or null when nothing
+     *                         was running.
+     * @throws InvalidConfigException If the queue component cannot be resolved.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function cancelScan(): ?ScanRecord
+    {
+        $running = $this->_runningScanId(
+            DateTimeHelper::now()->modify('-' . self::_ABANDONED_AFTER_MINUTES . ' minutes'),
+        );
+
+        if ($running === null) {
+            return null;
+        }
+
+        $scan = ScanRecord::findOne(['id' => $running]);
+
+        if (!$scan instanceof ScanRecord) {
+            // Gone between the two reads, which means the history was pruned in
+            // the same instant. There is nothing left to call off.
+            return null;
+        }
+
+        $released = QueueJobs::release();
+
+        $scan->status = ScanStatus::Cancelled->value;
+        $scan->dateFinished = Db::prepareDateForDb(DateTimeHelper::now());
+        $scan->save(false);
+
+        // The badges read a cached set of counts, and a run stopping part way
+        // through is exactly when somebody goes looking at them.
+        LinkAudit::$plugin->getReportService()->invalidateCounts();
+
+        Craft::info("Cancelled scan $running: released $released queued job(s).", 'link-audit');
+
+        return $scan;
+    }
 
     /**
      * Checks one chunk of URL rows and writes what came back.
@@ -868,6 +929,64 @@ class ScanService extends Component
         }
 
         return $found;
+    }
+
+    /**
+     * Throws away every scan result and starts the plugin over.
+     *
+     * For an install whose settings have changed enough that the stored findings
+     * are answering a question nobody is asking any more: a different scan set,
+     * a different normalisation, a rewritten set of exclusions. Rebuilding from
+     * an empty table is honest, and cheaper to reason about than a report that
+     * is half one set of rules and half another.
+     *
+     * The ignores table is left standing, and that is the whole point of doing
+     * this here rather than by dropping the tables. An ignore is an editorial
+     * decision about an address, not a scan result, and it survives the URL row
+     * it was made about: {@see UrlStore::upsert()} asks the ignores table
+     * whenever it inserts a row it has never seen before, so a rediscovered
+     * address that somebody dismissed months ago is born ignored and is never
+     * requested.
+     *
+     * Anything running is called off first, jobs and all, so a worker cannot
+     * come back with a verdict for a table that has just been emptied.
+     *
+     * Deleted in foreign key order: the references table points at both the URLs
+     * and the scans tables, so it goes first.
+     *
+     * @return array<string, int> How many rows went, per table.
+     * @throws InvalidConfigException If the queue component cannot be resolved.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function resetAll(): array
+    {
+        $this->cancelScan();
+
+        $db = Craft::$app->getDb();
+        $removed = [];
+
+        foreach ([
+            'references' => ReferenceRecord::tableName(),
+            'urls' => UrlRecord::tableName(),
+            'scans' => ScanRecord::tableName(),
+            'hosts' => HostRecord::tableName(),
+        ] as $label => $table) {
+            $removed[$label] = $db->createCommand()->delete($table)->execute();
+        }
+
+        LinkAudit::$plugin->getReportService()->invalidateCounts();
+
+        Craft::info(sprintf(
+            'Reset: removed %d reference(s), %d URL(s), %d scan(s) and %d host record(s). '
+            . 'The ignores were left alone.',
+            $removed['references'],
+            $removed['urls'],
+            $removed['scans'],
+            $removed['hosts'],
+        ), 'link-audit');
+
+        return $removed;
     }
 
     /**
