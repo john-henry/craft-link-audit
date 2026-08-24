@@ -91,12 +91,12 @@ class ScanService extends Component
     /**
      * Checks one chunk of URL rows and writes what came back.
      *
-     * Internal rows are answered from the database rather than over HTTP, but
-     * they are answered: their verdict has a time to live like any other, and a
-     * row nobody settles would be offered on every pass for ever. The one
-     * exception is a file-shaped internal URL that matched no element or route:
-     * {@see InternalResolver::resolveUrl()} hands that one back as null, and it
-     * joins the external URLs in this chunk's HTTP batch instead, its own host's
+     * An internal row the database can answer for is answered from the database
+     * rather than over HTTP, and it is answered: its verdict has a time to live
+     * like any other, and a row nobody settles would be offered on every pass
+     * for ever. An internal row no element and no route accounts for is handed
+     * back as null by {@see InternalResolver::resolveUrl()}, and joins the
+     * external URLs in this chunk's HTTP batch instead, its own host's
      * throttling applying automatically since the scheduler treats every host
      * alike.
      *
@@ -155,10 +155,10 @@ class ScanService extends Component
             $verdict = $this->_resolveStored($row);
 
             if ($verdict === null) {
-                // A file-shaped internal URL that matched no element or route:
-                // the database has nothing more to say, so it is judged the same
-                // way an external URL is, own-host throttling included, since
-                // the scheduler treats every host alike.
+                // An internal URL no element and no route accounts for: the
+                // database has nothing more to say, so it is judged the same way
+                // an external URL is, own-host throttling included, since the
+                // scheduler treats every host alike.
                 $external[(string)$row['url']] = (int)$row['id'];
 
                 continue;
@@ -1267,9 +1267,9 @@ class ScanService extends Component
      * the scheme, so it is the one source that can be trusted on every row.
      *
      * @param array<string, mixed> $row The URL row.
-     * @return Verdict|null The verdict, or null when the row is a file-shaped
-     *                      internal URL that belongs to the HTTP check phase
-     *                      rather than a database lookup.
+     * @return Verdict|null The verdict, or null when the row is an internal URL
+     *                      the database cannot answer for, so it belongs to the
+     *                      HTTP check phase rather than a database lookup.
      * @author John Henry Donovan
      * @since 1.0.0
      */

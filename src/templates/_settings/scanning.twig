@@ -23,7 +23,7 @@
 
     {{ forms.lightswitchField({
         label: 'Scan On Element Save'|t('link-audit'),
-        instructions: 'Pull the links out of an element again every time somebody saves it, so a link pasted in this morning is on the report without waiting for the next full scan. Links to your own pages are settled there and then. An outside URL is left waiting for the next check, since a save is no time to be firing off requests. Bulk resaves and drafts are left alone.'|t('link-audit'),
+        instructions: 'Pull the links out of an element again every time somebody saves it, so a link pasted in this morning is on the report without waiting for the next full scan. A link to one of your own pages an element or a route answers for is settled there and then. Anything that has to be asked for over the wire is left waiting for the next check, since a save is no time to be firing off requests. Bulk resaves and drafts are left alone.'|t('link-audit'),
         id: 'scanOnSave',
         name: 'settings[scanOnSave]',
         on: settings.scanOnSave,
@@ -34,7 +34,7 @@
 
     {{ forms.lightswitchField({
         label: 'Check Internal Links'|t('link-audit'),
-        instructions: 'Check the links that point at your own sites. They are answered out of the database rather than over HTTP: the page is either there and enabled or it is not, and asking your own server about a page it just rendered is a request paid for twice. Turn this off and links to your own sites are left out of the reports altogether.'|t('link-audit'),
+        instructions: 'Check the links that point at your own sites. A link to a page one of your elements or routes answers for is settled out of the database rather than over HTTP, because asking your own server about a page it just rendered is a request paid for twice. Anything the database cannot account for is asked for over HTTP like any other link, so a redirect rule, a rewrite or a file gets an honest answer instead of being called broken. Turn this off and links to your own sites are left out of the reports altogether.'|t('link-audit'),
         id: 'checkInternalLinks',
         name: 'settings[checkInternalLinks]',
         on: settings.checkInternalLinks,
@@ -188,7 +188,7 @@
 
     {{ forms.editableTableField({
         label: 'Always Valid Internal URLs'|t('link-audit'),
-        instructions: 'Internal addresses that are fine even though nothing in the database answers to them: a route another plugin registers at runtime, a file the web server hands out itself, that sort of thing. Each row is a regular expression tested against the URI, so <code>^api/</code> covers everything under that path. This is the escape hatch when a template-only route is being reported as broken.'|t('link-audit'),
+        instructions: 'Internal addresses that are fine even though nothing in the database answers to them: a route another plugin registers at runtime, a file the web server hands out itself, that sort of thing. Each row is a regular expression tested against the URI, so <code>^api/</code> covers everything under that path. A match is taken on trust and never asked for over HTTP, so this is also how you keep a scan away from a path that should not be requested at all.'|t('link-audit'),
         id: 'internalUrlAllowPatterns',
         name: 'settings[internalUrlAllowPatterns]',
         cols: {

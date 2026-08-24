@@ -23,30 +23,31 @@ use johnhenry\linkaudit\models\Verdict;
 use yii\base\Component;
 
 /**
- * Answers a link that points at this installation, without making a request.
+ * Answers a link that points at this installation, out of the database where
+ * the database knows the answer.
  *
- * An internal link is not an HTTP question. The answer is already in the
- * database, and asking your own server about a page it just rendered is a
- * request you paid for twice. So a root-relative link is turned back into the
- * URI its site would store, and looked up against the elements on that site.
+ * An address that matches a live element is not an HTTP question. The answer is
+ * already there, and asking your own server about a page it just rendered is a
+ * request paid for twice. So a root-relative link is turned back into the URI
+ * its site would store, and looked up against the elements on that site.
  *
- * The order matters, and it is built around not crying wolf. An element match
- * settles it. No element is not yet a verdict, because a template-only route in
- * `config/routes.php` or the project config serves a real page that no element
- * knows about, and reporting those as broken is the fastest way to get a link
- * checker switched off. Only after the routes have been asked, and the
- * `internalUrlAllowPatterns` escape hatch has had its say, is a link called
- * broken.
+ * The order matters, and it is built around not crying wolf. A live element
+ * match settles it. An element sitting at that URI with its switch off settles
+ * it too, and is said plainly, because the server would answer that address with
+ * a 404 that tells the author less than the database already knows. A
+ * template-only route in `config/routes.php` or the project config serves a real
+ * page no element knows about, so the routes are asked before anything else, and
+ * the `internalUrlAllowPatterns` escape hatch has its say after that.
  *
- * One more thing is asked before broken is reached: whether the address is
- * shaped like a file rather than a page, per {@see self::_isFileShaped()}. A
- * transformed asset, a PDF an author linked straight to, anything under this
- * installation's own asset filesystems, none of it lives in `elements_sites`
- * and none of it is a route, so the element and route checks above never see
- * it. It is not called broken either: a file is answered by asking the server
- * for it, and that question belongs to the same HTTP check phase an external
- * link goes through, not to a database lookup. The URL is simply left pending,
- * the same way a `#fragment` is.
+ * What none of those answers for is left pending rather than called broken, and
+ * the HTTP check phase an external link goes through asks the server for it. The
+ * database is not the last word on this installation's own addresses: a redirect
+ * plugin, an `.htaccess` rule, a CDN and a URL rule a plugin registers at
+ * runtime all serve pages that `elements_sites` has never heard of, and so does
+ * every file, from an uploaded PDF to a transformed asset. Calling that lot
+ * broken on a database miss is the fastest way to get a link checker switched
+ * off, and a 301 an editor should be acting on would be reported as the one
+ * thing it is not.
  *
  * @author John Henry Donovan
  * @since 1.0.0
@@ -186,9 +187,9 @@ class InternalResolver extends Component
      * @param int $siteId The site the link was found on. The URL itself decides
      *                    which site it is actually resolved against, since two
      *                    sites can share a host and differ only by base path.
-     * @return Verdict|null The verdict, or null when the URL is shaped like a
-     *                      file and belongs to the HTTP check phase instead of
-     *                      a database lookup.
+     * @return Verdict|null The verdict, or null when nothing in the database
+     *                      answers for the address and the HTTP check phase has
+     *                      to ask the server instead.
      * @author John Henry Donovan
      * @since 1.0.0
      */
@@ -214,18 +215,24 @@ class InternalResolver extends Component
             return $this->_fragmentVerdict($url);
         }
 
+        // An element is sitting at that address with its switch off. The server
+        // would answer it with a 404, which tells the author less than this
+        // does, so the server is not asked.
+        if ($this->_disabledElementExists($uri, (int)$site->id)) {
+            return $this->_broken(
+                'The page at this address is disabled on this site, so nobody can see it.',
+            );
+        }
+
         if ($this->_matchesAllowPattern($uri)) {
             return new Verdict(status: UrlStatus::Ignored);
         }
 
         // Nothing in the database answers to this address, but that is not the
-        // same as nobody: a file is never an element or a route, and only a
-        // request to it can say whether it is there.
-        if ($this->_isFileShaped($url)) {
-            return null;
-        }
-
-        return $this->_broken('Nothing on this site answers to that address.');
+        // same as nobody: a redirect rule, a file, a route registered at
+        // runtime, all of them are served by the server and by nothing that can
+        // be looked up here. Only a request can say which it is.
+        return null;
     }
 
     // =========================================================================
@@ -247,6 +254,45 @@ class InternalResolver extends Component
             reason: Verdict::REASON_NO_ELEMENT,
             message: $message,
         );
+    }
+
+    /**
+     * Whether an element on a site holds a URI but is switched off.
+     *
+     * Only ever asked about a URI no live element and no route answered for, so
+     * the live lookup has already had its say. Off at either level counts: an
+     * element disabled everywhere and an element disabled on this one site are
+     * the same thing to a visitor, and the author is told the same thing about
+     * both.
+     *
+     * Drafts, revisions and trashed rows are excluded here as they are in the
+     * live lookup. A draft holding the URI does not mean the address is served,
+     * and a trashed element has gone as far as a visitor is concerned.
+     *
+     * @param string $uri The URI, as `elements_sites` stores it.
+     * @param int $siteId The site to look in.
+     * @return bool Whether a disabled element holds it.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _disabledElementExists(string $uri, int $siteId): bool
+    {
+        return (new Query())
+            ->from(['elements_sites' => Table::ELEMENTS_SITES])
+            ->innerJoin(['elements' => Table::ELEMENTS], '[[elements.id]] = [[elements_sites.elementId]]')
+            ->where([
+                'elements_sites.siteId' => $siteId,
+                'elements_sites.uri' => $uri,
+                'elements.draftId' => null,
+                'elements.revisionId' => null,
+                'elements.dateDeleted' => null,
+            ])
+            ->andWhere([
+                'or',
+                ['elements_sites.enabled' => false],
+                ['elements.enabled' => false],
+            ])
+            ->exists();
     }
 
     /**
@@ -334,81 +380,6 @@ class InternalResolver extends Component
             message: "The page is there, but nothing on it is named \"$name\", so the link lands at "
                 . 'the top of the page instead.',
         );
-    }
-
-    /**
-     * Whether a URL is shaped like a file rather than a page.
-     *
-     * Only ever asked about a URL that has already failed to match an element
-     * or a route, {@see self::resolveUrl()} tries those first, so a legitimate
-     * element URI carrying a dot of its own, `/products/1.5-inch-widget`, say,
-     * is never reached by this check and is never mistaken for a file.
-     *
-     * Two signals, either one enough. The last path segment carrying a
-     * dot-extension covers what an author actually links to: an uploaded PDF,
-     * a transformed asset's cache-busted filename, and everything else nothing
-     * in the elements table was ever going to answer for. And a path sitting
-     * under the base URL of one of this installation's own asset filesystems is
-     * always a file whether or not it happens to carry an extension, because
-     * nothing else is ever served out of a filesystem's own path.
-     *
-     * @param string $url The normalised URL.
-     * @return bool Whether the URL is shaped like a file.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _isFileShaped(string $url): bool
-    {
-        $path = (string)parse_url($url, PHP_URL_PATH);
-
-        if (pathinfo($path, PATHINFO_EXTENSION) !== '') {
-            return true;
-        }
-
-        return $this->_isUnderAssetFilesystem($url);
-    }
-
-    /**
-     * Whether a URL sits under the base URL of one of this installation's own
-     * asset filesystems.
-     *
-     * Every configured filesystem is asked, not only the ones attached to a
-     * volume: a transform filesystem serves images from a base URL of its own,
-     * and it is exactly the kind of address this check exists for. A
-     * filesystem with no public URL at all, `hasUrls` off, has nothing to match
-     * against and is skipped.
-     *
-     * @param string $url The normalised URL.
-     * @return bool Whether the URL falls under a filesystem's base URL.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _isUnderAssetFilesystem(string $url): bool
-    {
-        $host = mb_strtolower((string)parse_url($url, PHP_URL_HOST), 'UTF-8');
-        $path = (string)parse_url($url, PHP_URL_PATH);
-
-        foreach (Craft::$app->getFs()->getAllFilesystems() as $fs) {
-            $rootUrl = $fs->getRootUrl();
-
-            if ($rootUrl === null) {
-                continue;
-            }
-
-            $fsHost = mb_strtolower((string)parse_url($rootUrl, PHP_URL_HOST), 'UTF-8');
-
-            if ($fsHost !== $host) {
-                continue;
-            }
-
-            $fsPath = rtrim((string)parse_url($rootUrl, PHP_URL_PATH), '/');
-
-            if ($fsPath === '' || $path === $fsPath || str_starts_with($path, $fsPath . '/')) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

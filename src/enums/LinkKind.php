@@ -33,7 +33,8 @@ enum LinkKind: string
 
     /**
      * An http(s) URL on one of this installation's sites. Resolved against
-     * elements and routes, never fetched.
+     * elements and routes first, and only fetched when neither of those
+     * accounts for the address.
      */
     case Internal = 'internal';
 

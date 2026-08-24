@@ -420,11 +420,13 @@ class ScanController extends Controller
         }
 
         // Said out loud, because CHECKED reads like the whole story and is not:
-        // a link to one of your own pages is settled out of the database as it
-        // is read, so it never reaches the check phase to be counted there.
+        // a link to one of your own pages that an element or a route answers for
+        // is settled out of the database as it is read, so it never reaches the
+        // check phase to be counted there.
         $this->stdout(
-            "\n  PAGES is the rendered crawl. CHECKED is what went out over HTTP: links to\n"
-            . "  your own pages are settled as they are read, so they never reach that column.\n",
+            "\n  PAGES is the rendered crawl. CHECKED is what went out over HTTP: a link to\n"
+            . "  one of your own pages that an element or a route answers for is settled as it\n"
+            . "  is read, so it never reaches that column.\n",
         );
     }
 
@@ -455,8 +457,8 @@ class ScanController extends Controller
         }
 
         $counts['-- references'] = (int)(new Query())->from([ReferenceRecord::tableName()])->count();
-        $counts['-- checked over HTTP'] = $this->_urlCount(false);
-        $counts['-- resolved locally'] = $this->_urlCount(true);
+        $counts['-- on other sites'] = $this->_urlCount(false);
+        $counts['-- on your own sites'] = $this->_urlCount(true);
         $counts['-- waiting to be checked'] = (int)LinkAudit::$plugin->getUrlStore()->pendingQuery()->count();
 
         $this->_printTable('URLs by verdict', $counts);
@@ -490,9 +492,9 @@ class ScanController extends Controller
     /**
      * How many URL rows belong to this installation, or to somebody else's.
      *
-     * The honest half of the CHECKED column: an internal URL is answered out of
-     * the database as it is stored, so it never goes out on the wire and is
-     * never counted as a check.
+     * The honest half of the CHECKED column: an internal URL an element or a
+     * route answers for is settled out of the database as it is stored, so it
+     * never goes out on the wire and is never counted as a check.
      *
      * @param bool $internal Whether to count this installation's own URLs.
      * @return int The count.
