@@ -23,6 +23,7 @@ use craft\services\UserPermissions;
 use craft\web\UrlManager;
 use johnhenry\linkaudit\controllers\BaseController;
 use johnhenry\linkaudit\enums\UrlStatus;
+use johnhenry\linkaudit\helpers\ScannableElementTypes;
 use johnhenry\linkaudit\jobs\ExtractElementLinks;
 use johnhenry\linkaudit\LinkAudit;
 use johnhenry\linkaudit\models\SettingsModel;
@@ -385,6 +386,10 @@ trait PluginTrait
             return null;
         }
 
+        if (LinkAudit::$plugin->getScanService()->isContainerExcluded($root)) {
+            return null;
+        }
+
         return (int)$root->id;
     }
 
@@ -471,67 +476,102 @@ trait PluginTrait
      */
     private function _registerElementSidebarPanel(): void
     {
-        Event::on(
-            Element::class,
-            Element::EVENT_DEFINE_SIDEBAR_HTML,
-            static function(DefineHtmlEvent $e): void {
-                $element = $e->sender;
+        $handler = static function(DefineHtmlEvent $e): void {
+            $element = $e->sender;
 
-                if (!$element instanceof Element || $element->id === null) {
-                    return;
-                }
+            if (!$element instanceof Element || $element->id === null) {
+                return;
+            }
 
-                // A draft or a revision has no references of its own, and the
-                // canonical element's would be reported here as though they were
-                // this version's.
-                if (ElementHelper::isDraftOrRevision($element)) {
-                    return;
-                }
+            // The handler is registered on the concrete types and on the
+            // base Element both, so for most types it is offered the same
+            // event twice. Its own markup is the memo.
+            if (str_contains($e->html, 'link-audit-panel')) {
+                return;
+            }
 
-                // Assets fall out here along with anything the settings leave
-                // out: a panel on an element the scan never reads would say
-                // "no links" forever.
-                if (!in_array($element::class, LinkAudit::$plugin->getSettings()->resolvedScannedElementTypes(), true)) {
-                    return;
-                }
+            // A draft or a revision has no references of its own, and the
+            // canonical element's would be reported here as though they were
+            // this version's.
+            if (ElementHelper::isDraftOrRevision($element)) {
+                return;
+            }
 
-                // The panel is a report, so it wants the permission the reports
-                // want. Everything it links to would refuse the reader anyway.
-                if (!Craft::$app->getUser()->checkPermission(BaseController::PERMISSION_VIEW_REPORTS)) {
-                    return;
-                }
+            // Assets fall out here along with anything the settings leave
+            // out: a panel on an element the scan never reads would say
+            // "no links" forever.
+            if (!in_array($element::class, LinkAudit::$plugin->getSettings()->resolvedScannedElementTypes(), true)) {
+                return;
+            }
 
-                $site = Craft::$app->getSites()->getSiteById((int)$element->siteId);
+            // The same goes for an excluded section or category group: the
+            // scan never reads these either, so the panel has nothing honest
+            // to say on them.
+            if (LinkAudit::$plugin->getScanService()->isContainerExcluded($element)) {
+                return;
+            }
 
-                if ($site === null) {
-                    return;
-                }
+            // The panel is a report, so it wants the permission the reports
+            // want. Everything it links to would refuse the reader anyway.
+            if (!Craft::$app->getUser()->checkPermission(BaseController::PERMISSION_VIEW_REPORTS)) {
+                return;
+            }
 
-                // Nothing here is worth taking an edit screen down for. A panel
-                // that cannot render is a missing panel; an uncaught exception
-                // is an author who cannot edit their page.
-                try {
-                    $summary = LinkAudit::$plugin->getReportService()->elementSummary(
+            $site = Craft::$app->getSites()->getSiteById((int)$element->siteId);
+
+            if ($site === null) {
+                return;
+            }
+
+            // Nothing here is worth taking an edit screen down for. A panel
+            // that cannot render is a missing panel; an uncaught exception
+            // is an author who cannot edit their page.
+            try {
+                $summary = LinkAudit::$plugin->getReportService()->elementSummary(
                         (int)$element->id,
                         (int)$site->id,
                     );
 
-                    $e->html .= Craft::$app->getView()->renderTemplate(
+                $e->html .= Craft::$app->getView()->renderTemplate(
                         'link-audit/_sidebar/links-panel',
                         [
                             'element' => $element,
                             'site' => $site,
                             'summary' => $summary,
+                            'canRunScans' => Craft::$app->getUser()->checkPermission(
+                                BaseController::PERMISSION_RUN_SCANS,
+                            ),
                         ],
                     );
-                } catch (Throwable $err) {
-                    Craft::error(
+            } catch (Throwable $err) {
+                Craft::error(
                         "Could not render the links panel for element $element->id: " . $err->getMessage(),
                         'link-audit',
                     );
-                }
-            },
-        );
+            }
+        };
+
+        // Registered on every concrete element type as well as on the base
+        // Element, each prepended to its handler queue. The panel has work in
+        // it, broken links to click and a recheck button, so it belongs above
+        // the informational panels other plugins add, but never above Craft's
+        // own status and meta, which are in the event's html before any
+        // listener runs. The concrete registrations are what win that slot:
+        // Yii fires a concrete class's handlers before its parents', and the
+        // other plugins hook the concrete classes, so a handler only on
+        // Element runs after them whatever order it registered in. The base
+        // registration stays as the net for a type registered by a plugin
+        // this one cannot see, and the markup check above keeps the pair from
+        // drawing the panel twice. Deferred to onInit so the element type
+        // registry is complete when it is read.
+        Craft::$app->onInit(static function() use ($handler): void {
+            $classes = array_keys(ScannableElementTypes::all());
+            $classes[] = Element::class;
+
+            foreach ($classes as $class) {
+                Event::on($class, Element::EVENT_DEFINE_SIDEBAR_HTML, $handler, append: false);
+            }
+        });
     }
 
     /**

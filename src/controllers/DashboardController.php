@@ -7,9 +7,12 @@
 namespace johnhenry\linkaudit\controllers;
 
 use Craft;
+use craft\helpers\DateTimeHelper;
 use craft\helpers\UrlHelper;
+use DateTimeInterface;
 use johnhenry\linkaudit\enums\ScanMode;
 use johnhenry\linkaudit\enums\ScanStatus;
+use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\LinkAudit;
 use yii\base\InvalidConfigException;
 use yii\web\ForbiddenHttpException;
@@ -53,6 +56,31 @@ class DashboardController extends BaseController
         $runningScan = $report->runningScan();
         $identity = Craft::$app->getUser()->getIdentity();
         $canRunScans = Craft::$app->getUser()->checkPermission(self::PERMISSION_RUN_SCANS);
+        $counts = $report->verdictCounts($siteId);
+
+        // The Where to start pane only earns its place when there is a pile to
+        // be started on. A short broken list needs no triage.
+        $whereToStart = null;
+
+        if ((int)$counts[UrlStatus::Broken->value] > 0) {
+            $topByPlaces = $report->topBrokenByPlaces($siteId);
+            $lastScanStarted = $latestScan !== null
+                ? DateTimeHelper::toDateTime($latestScan['dateStarted'])
+                : false;
+
+            $whereToStart = [
+                'internalBroken' => $report->internalBrokenCount($siteId),
+                'recentlyBroken' => $report->recentlyBrokenCount(
+                    $siteId,
+                    DateTimeHelper::now()->modify('-7 days'),
+                ),
+                'firstSeenBroken' => $lastScanStarted instanceof DateTimeInterface
+                    ? $report->firstSeenBrokenCount($siteId, $lastScanStarted)
+                    : 0,
+                'topByPlaces' => $topByPlaces,
+                'topByPlacesTotal' => array_sum(array_column($topByPlaces, 'places')),
+            ];
+        }
 
         $this->registerJsTranslations();
 
@@ -62,7 +90,8 @@ class DashboardController extends BaseController
             'siteHandle' => $site->handle,
             'sites' => $this->allowedSites(),
             'canRunScans' => $canRunScans,
-            'counts' => $report->verdictCounts($siteId),
+            'counts' => $counts,
+            'whereToStart' => $whereToStart,
             'latestScan' => $latestScan,
             'latestScanMode' => $latestScan !== null
                 ? (ScanMode::tryFrom((string)$latestScan['mode'])?->label() ?? (string)$latestScan['mode'])

@@ -123,7 +123,7 @@ describe('TourService', function() {
     it('gives every step a selector, a title and a sentence', function() {
         $steps = tourService()->stepsForOverview();
 
-        expect($steps)->toHaveCount(6);
+        expect($steps)->toHaveCount(7);
 
         foreach ($steps as $step) {
             expect($step['selector'])->not->toBe('')
@@ -137,7 +137,7 @@ describe('TourService', function() {
     it('leaves the scan step out for a reader who may not run scans', function() {
         $selectors = array_column(tourService()->stepsForOverview(false), 'selector');
 
-        expect($selectors)->toHaveCount(5)
+        expect($selectors)->toHaveCount(6)
             ->and($selectors)->not->toContain('#link-audit-scan-actions')
             ->and($selectors)->toContain('.link-audit-tiles')
             ->and($selectors)->toContain('#link-audit-tour-start');

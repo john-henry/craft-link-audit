@@ -8,8 +8,11 @@ namespace johnhenry\linkaudit\services;
 
 use Craft;
 use craft\base\Element;
+use craft\base\ElementInterface;
 use craft\db\Query;
 use craft\db\Table;
+use craft\elements\Category;
+use craft\elements\Entry;
 use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
 use craft\helpers\Queue as QueueHelper;
@@ -405,6 +408,10 @@ class ScanService extends Component
             return null;
         }
 
+        if ($this->isContainerExcluded($element)) {
+            return null;
+        }
+
         $store = LinkAudit::$plugin->getUrlStore();
         $resolver = LinkAudit::$plugin->getInternalResolver();
         $ignores = LinkAudit::$plugin->getIgnoreService();
@@ -615,6 +622,80 @@ class ScanService extends Component
             ->one();
 
         return is_array($row) ? $row : null;
+    }
+
+    /**
+     * Rereads one element and brings every URL it carries forward for a check.
+     *
+     * For the button on the edit screen's links panel: an editor who has just
+     * fixed a link wants the report to catch up while they are looking at it,
+     * not on the next scan's schedule. The element is read again first, so the
+     * fix itself is what gets asked about, then everything the page points at
+     * has its next check dragged into the past and a check-only run is queued.
+     * Ignored URLs stay ignored: a decision somebody recorded is not undone by
+     * a refresh button.
+     *
+     * @param int $elementId The element to reread.
+     * @param int $siteId The site it is being edited on.
+     * @return int How many URLs will be asked again.
+     * @throws Throwable If the element's reference rows cannot be rebuilt.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function recheckElementLinks(int $elementId, int $siteId): int
+    {
+        $this->scanElement($elementId, $siteId);
+
+        $held = (new Query())
+            ->select(['r.urlId'])
+            ->from(['r' => ReferenceRecord::tableName()])
+            ->where(['r.siteId' => $siteId])
+            ->andWhere(['or', ['r.elementId' => $elementId], ['r.ownerElementId' => $elementId]]);
+
+        // Dragging the next check date into the past is what puts these back
+        // in front of the check phase, the same move the recheck-broken
+        // command makes, scoped to the one page.
+        $count = (int)Craft::$app->getDb()->createCommand()
+            ->update(
+                UrlRecord::tableName(),
+                ['nextCheckAfter' => Db::prepareDateForDb(DateTimeHelper::now()->modify('-1 minute'))],
+                ['and', ['in', 'id', $held], ['not', ['status' => UrlStatus::Ignored->value]]],
+            )
+            ->execute();
+
+        if ($count > 0) {
+            $this->startScan(ScanMode::CheckOnly);
+        }
+
+        return $count;
+    }
+
+    /**
+     * Whether an element sits in a section or category group the settings
+     * exclude outright.
+     *
+     * This is the fence the Excluded URI Patterns setting cannot be: a section
+     * or group whose entries have no URLs offers no URI to match, and this one
+     * asks the container itself. Anything that is neither an entry nor a
+     * category has no container to be excluded by.
+     *
+     * @param ElementInterface $element The element about to be read, or the
+     *                                  target of a link about to be judged.
+     * @return bool Whether it is excluded.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function isContainerExcluded(ElementInterface $element): bool
+    {
+        if ($element instanceof Entry && $element->sectionId !== null) {
+            return in_array((int)$element->sectionId, $this->_settings()->excludedSectionIds(), true);
+        }
+
+        if ($element instanceof Category) {
+            return in_array((int)$element->groupId, $this->_settings()->excludedCategoryGroupIds(), true);
+        }
+
+        return false;
     }
 
     /**

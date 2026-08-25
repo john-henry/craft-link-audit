@@ -173,6 +173,14 @@ class InternalResolver extends Component
             return $this->_broken('Whatever this pointed at has been deleted.');
         }
 
+        // A target in an excluded section or category group is nobody's
+        // problem by declaration: it was excluded because its entries are
+        // rendered some other way, so whether this one is disabled or has no
+        // URL is exactly the judgement the setting asks not to be made.
+        if (LinkAudit::$plugin->getScanService()->isContainerExcluded($element)) {
+            return new Verdict(status: UrlStatus::Ignored, reason: Verdict::REASON_IGNORE_RULE);
+        }
+
         if (!$element->enabled || $element->getEnabledForSite($siteId) === false) {
             // A disabled target that still carries a URL settles nothing for an
             // authored link: the template renders that address either way, and

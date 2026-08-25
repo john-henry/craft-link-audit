@@ -169,6 +169,80 @@ describe('ReportService::topPages', function() {
     });
 });
 
+describe('ReportService::internalBrokenCount', function() {
+    it('counts the broken URLs pointing at this installation, and no others', function() {
+        ovReference(ovUrl(['isInternal' => true]), ovElementId());
+        ovReference(ovUrl(['isInternal' => false]), ovElementId());
+        ovUrl(['isInternal' => true]);
+
+        expect(ovReport()->internalBrokenCount($this->siteId))->toBe(1);
+    });
+});
+
+describe('ReportService::recentlyBrokenCount', function() {
+    it('counts what was working lately, off when it last worked rather than when it last failed', function() {
+        // Broke this week: counted.
+        ovReference(ovUrl(['dateLastOk' => Db::prepareDateForDb(new DateTime('-2 days'))]), ovElementId());
+        // Broken for a month: not fresh, whatever its recent recheck stamped.
+        ovReference(ovUrl([
+            'dateLastOk' => Db::prepareDateForDb(new DateTime('-30 days')),
+            'dateLastBroken' => Db::prepareDateForDb(new DateTime()),
+        ]), ovElementId());
+        // Never known to work: old rot, not a regression.
+        ovReference(ovUrl(), ovElementId());
+
+        expect(ovReport()->recentlyBrokenCount($this->siteId, new DateTime('-7 days')))->toBe(1);
+    });
+});
+
+describe('ReportService::firstSeenBrokenCount', function() {
+    it('counts what the report only just met, and leaves the old rot out', function() {
+        // First seen an hour ago: new to the report.
+        ovReference(ovUrl(['dateFirstSeen' => Db::prepareDateForDb(new DateTime('-1 hour'))]), ovElementId());
+        // Known for a month: whatever it is, it is not news.
+        ovReference(ovUrl(['dateFirstSeen' => Db::prepareDateForDb(new DateTime('-30 days'))]), ovElementId());
+        // New but working: nothing to start on.
+        ovReference(ovUrl([
+            'status' => UrlStatus::Ok->value,
+            'dateFirstSeen' => Db::prepareDateForDb(new DateTime('-1 hour')),
+        ]), ovElementId());
+
+        expect(ovReport()->firstSeenBrokenCount($this->siteId, new DateTime('-1 day')))->toBe(1);
+    });
+});
+
+describe('ReportService::topBrokenByPlaces', function() {
+    it('puts the URL sitting in the most places first, with its count', function() {
+        $everywhere = ovUrl(['url' => 'https://bad.example/everywhere']);
+        ovReference($everywhere, ovElementId());
+        ovReference($everywhere, ovElementId());
+        ovReference($everywhere, ovElementId());
+        ovReference(ovUrl(['url' => 'https://bad.example/once']), ovElementId());
+        ovReference(ovUrl(['url' => 'https://fine.example/', 'status' => UrlStatus::Ok->value]), ovElementId());
+
+        $top = ovReport()->topBrokenByPlaces($this->siteId);
+
+        expect($top)->toHaveCount(2)
+            ->and($top[0]['url'])->toBe('https://bad.example/everywhere')
+            ->and($top[0]['label'])->toBe('https://bad.example/everywhere')
+            ->and($top[0]['places'])->toBe(3)
+            ->and($top[1]['places'])->toBe(1);
+    });
+
+    it('names a stand-in row by its target element rather than its storage key', function() {
+        $target = UserFactory::factory()->create();
+        ovReference(ovUrl(['url' => 'element:' . $target->id, 'host' => '']), ovElementId());
+
+        $top = ovReport()->topBrokenByPlaces($this->siteId);
+        $expected = Craft::$app->getElements()
+            ->getElementById((int)$target->id, null, $this->siteId)
+            ?->getUiLabel();
+
+        expect($top[0]['label'])->toBe($expected)
+            ->and($top[0]['label'])->not->toContain('element:');
+    });
+});
+
 describe('The overview screen', function() {
     it('renders with the counts on it', function() {
         $urlId = ovUrl();
@@ -191,6 +265,40 @@ describe('The overview screen', function() {
             ->assertSee('Where things stand')
             ->assertSee('Hosts giving the most trouble')
             ->assertSee('2 minutes');
+    });
+
+    it('offers a starting point while anything is broken, and not otherwise', function() {
+        $urlId = ovUrl(['isInternal' => true]);
+        ovReference($urlId, ovElementId());
+
+        Db::insert(ScanRecord::tableName(), [
+            'siteId' => $this->siteId,
+            'mode' => ScanMode::Full->value,
+            'status' => ScanStatus::Complete->value,
+            'dateStarted' => Db::prepareDateForDb(new DateTime('-1 minute')),
+            'dateFinished' => Db::prepareDateForDb(new DateTime()),
+        ]);
+
+        $this->get('admin/link-audit')
+            ->assertOk()
+            ->assertSee('id="link-audit-start"', false)
+            ->assertSee('point at your own sites')
+            ->assertSee('internal=1', false);
+
+        ovClearTables();
+        ovReference(ovUrl(['status' => UrlStatus::Ok->value]), ovElementId());
+
+        Db::insert(ScanRecord::tableName(), [
+            'siteId' => $this->siteId,
+            'mode' => ScanMode::Full->value,
+            'status' => ScanStatus::Complete->value,
+            'dateStarted' => Db::prepareDateForDb(new DateTime('-1 minute')),
+            'dateFinished' => Db::prepareDateForDb(new DateTime()),
+        ]);
+
+        $this->get('admin/link-audit')
+            ->assertOk()
+            ->assertDontSee('id="link-audit-start"');
     });
 
     // Every other count on the row is a link to the list behind it, and a number

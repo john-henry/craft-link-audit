@@ -31,6 +31,17 @@
                 options: { '': 'Anywhere'|t('link-audit') }|merge(sourceOptions),
             }) }}
 
+            {{ forms.selectField({
+                label: 'Points At'|t('link-audit'),
+                name: 'internal',
+                value: filters.internal,
+                options: {
+                    '': 'Anywhere'|t('link-audit'),
+                    '1': 'Your own sites'|t('link-audit'),
+                    '0': 'Other websites'|t('link-audit'),
+                },
+            }) }}
+
             {% if verdict == 'redirect' %}
                 {{ forms.selectField({
                     label: 'Kind'|t('link-audit'),
@@ -55,6 +66,7 @@
                 elementType: filters.elementType,
                 source: filters.source,
                 permanent: filters.permanent,
+                internal: filters.internal,
             }|filter(value => value is not null and value != '') %}
 
             <div class="field">
@@ -112,6 +124,7 @@
             elementType: filters.elementType,
             source: filters.source,
             permanent: filters.permanent,
+            internal: filters.internal,
         }|json_encode|raw }};
 
         var query = Object.keys(params).filter(function(key) {
@@ -137,9 +150,11 @@
             // A button with a hidden span inside is not `:empty`, so Craft gives
             // its icon the 5px trailing margin meant to separate an icon from
             // its text, and an icon-only button comes out lopsided.
+            // A stand-in row carries its target element's title as the label;
+            // everything else labels itself with its own address.
             var html = '<span class="link-audit-cell">'
                 + '<a href="' + Craft.escapeHtml(value.detailUrl) + '" title="' + Craft.escapeHtml(value.full) + '">'
-                + Craft.escapeHtml(truncate(value.full)) + '</a>';
+                + Craft.escapeHtml(truncate(value.label || value.full)) + '</a>';
 
             // A stand-in row for an element link holds an internal marker, not
             // an address, so there is nothing worth copying from it.
@@ -284,7 +299,7 @@
         // A filtered page that comes back empty is not the same story as a
         // site with nothing to report, and saying "nothing broken" while two
         // broken links sit outside the filter is a lie the reader acts on.
-        var filtered = ['host', 'elementType', 'source', 'permanent'].some(function(key) {
+        var filtered = ['host', 'elementType', 'source', 'permanent', 'internal'].some(function(key) {
             return params[key] !== '' && params[key] !== null && params[key] !== undefined;
         });
 

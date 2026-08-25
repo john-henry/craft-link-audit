@@ -7,19 +7,21 @@
 .link-audit-code--5xx { background: var(--bg-warning); color: var(--fg-warning); }
 .link-audit-panel__legend { display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 8px; }
 .link-audit-panel__when { font-size: 11px; font-weight: 400; color: var(--fg-subtle); text-transform: none; letter-spacing: normal; }
-.link-audit-panel__body { padding: 12px 18px 0; }
-.link-audit-panel__data { margin: 0; }
-.link-audit-panel__row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-block: 4px; }
-.link-audit-panel__row > dt { margin: 0; color: var(--fg-subtle); font-size: 12px; }
+.link-audit-panel__body { padding: 0 18px; }
+.link-audit-panel__data { margin: 0 -18px; }
+.link-audit-panel__row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 14px 18px; border-block-end: 1px solid var(--border-hairline); }
+.link-audit-panel__row > dt { margin: 0; }
 .link-audit-panel__row > dd { margin: 0; text-align: end; }
-.link-audit-panel__urls { margin-block-start: 8px; }
+.link-audit-panel__hint { margin-block: 8px 0; font-size: 12px; }
+.link-audit-panel__urls { margin-block-start: 6px; }
 .link-audit-panel__url { margin-block-end: 4px; word-break: break-all; }
-.link-audit-panel__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 18px; }
+.link-audit-panel__actions { padding: 12px 18px 0; }
+.link-audit-panel__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 18px; }
 {% endcss %}
 
 <fieldset>
     <legend class="h6 link-audit-panel__legend">
-        <span>{{ 'Links'|t('link-audit') }}</span>
+        <span>{{ 'Link Audit'|t('link-audit') }}</span>
         {% if summary.lastChecked %}
             <span class="link-audit-panel__when">
                 {{ 'checked {date}'|t('link-audit', { date: summary.lastChecked|date('d M Y') }) }}
@@ -54,16 +56,25 @@
                 </dl>
 
                 {% if summary.brokenUrls|length %}
+                    <p class="light link-audit-panel__hint">
+                        {{ 'Click one to find it on the page.'|t('link-audit') }}
+                    </p>
                     <ul class="link-audit-panel__urls">
                         {% for broken in summary.brokenUrls %}
                             <li class="link-audit-panel__url">
                                 <a href="{{ cpUrl('link-audit/url', { hash: broken.urlHash, site: site.handle }) }}"
-                                   title="{{ broken.url }}">
-                                    {{ broken.url|length > 44 ? broken.url|slice(0, 44) ~ '...' : broken.url }}
+                                   title="{{ 'Show it on this page'|t('link-audit') }}"
+                                   {% if broken.blockId %}data-la-block="{{ broken.blockId }}"{% endif %}
+                                   {% if broken.fieldHandle %}data-la-field="{{ broken.fieldHandle }}"{% endif %}
+                                   {% if broken.rawHref %}data-la-href="{{ broken.rawHref }}"{% endif %}
+                                   {% if broken.linkText %}data-la-text="{{ broken.linkText }}"{% endif %}>
+                                    {{ broken.shortLabel }}
                                 </a>
                                 {% if broken.httpStatus %}
                                     {% set codeKind = broken.httpStatus < 300 ? '2xx' : (broken.httpStatus < 400 ? '3xx' : (broken.httpStatus < 500 ? '4xx' : '5xx')) %}
-                                    <span class="link-audit-code link-audit-code--{{ codeKind }}" title="{{ broken.httpStatusLabel }}">{{ broken.httpStatus }}</span>
+                                    <a class="link-audit-code link-audit-code--{{ codeKind }}"
+                                       href="{{ cpUrl('link-audit/url', { hash: broken.urlHash, site: site.handle }) }}"
+                                       title="{{ 'See the full report for this link'|t('link-audit') }}">{{ broken.httpStatus }}</a>
                                 {% endif %}
                             </li>
                         {% endfor %}
@@ -77,6 +88,17 @@
                 {% endif %}
             </div>
 
+            {% if canRunScans ?? false %}
+                <div class="link-audit-panel__actions">
+                    <button type="button" class="btn fullwidth" id="link-audit-panel-recheck"
+                            data-element-id="{{ element.id }}" data-site-id="{{ site.id }}">
+                        {{ summary.total == 0
+                            ? 'Check this page'|t('link-audit')
+                            : 'Check this page again'|t('link-audit') }}
+                    </button>
+                </div>
+            {% endif %}
+
             <div class="link-audit-panel__foot">
                 <a class="go" href="{{ cpUrl('link-audit/broken', { site: site.handle }) }}">
                     {{ 'Every broken link on this site'|t('link-audit') }}
@@ -85,3 +107,253 @@
         </div>
     </div>
 </fieldset>
+
+{% js at head %}
+// Craft's element editor rewrites the URL with history.replaceState as it
+// boots, and the fragment goes with it. Read it here in the head, before any
+// of that runs, so the scroller below still knows where it was sent.
+window.LinkAuditBlockHash = window.location.hash;
+{% endjs %}
+
+{% js %}
+(function() {
+    'use strict';
+
+    // The report's Edit links name where a link sits with a fragment of the
+    // plugin's own: #la-field-<handle> for a top-level field, and
+    // #la-block-<id>--<matrixFieldHandle> for a link inside a Matrix block,
+    // because Craft gives a block a data-id and no id a fragment could reach.
+    // A block being edited through a draft carries a different id than the
+    // canonical one the scan recorded, so when no block matches, the Matrix
+    // field named after the double dash is scrolled to instead.
+    var hash = window.LinkAuditBlockHash || window.location.hash;
+    var match = hash.match(/^#la-(?:block-(\d+)(?:--([a-zA-Z0-9_]+))?|field-([a-zA-Z0-9_]+))$/);
+
+    if (!match) {
+        return;
+    }
+
+    var attempts = 0;
+
+    // A field on another tab is in the DOM but hidden inside its pane. The
+    // pane carries no marker of its own; what ties it to its tab is the tab
+    // anchor's aria-controls naming the pane's id. So the walk goes up from
+    // the target until an ancestor's id is one a tab controls, and that tab
+    // is clicked open before anything tries to scroll.
+    function revealTab(target) {
+        var node = target.parentElement;
+
+        while (node && node !== document.body) {
+            if (node.id) {
+                var tab = document.querySelector('a[role="tab"][aria-controls="' + node.id + '"]');
+
+                if (tab) {
+                    if (tab.getAttribute('aria-selected') !== 'true') {
+                        tab.click();
+                    }
+
+                    return;
+                }
+            }
+
+            node = node.parentElement;
+        }
+    }
+
+    function highlight(target) {
+        revealTab(target);
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.style.outline = '3px solid #e0326e';
+        target.style.outlineOffset = '3px';
+        target.style.boxShadow = '0 0 0 6px rgba(224, 50, 110, 0.15)';
+        target.style.borderRadius = 'var(--large-border-radius, 5px)';
+
+        window.setTimeout(function() {
+            target.style.outline = '';
+            target.style.outlineOffset = '';
+            target.style.boxShadow = '';
+            target.style.borderRadius = '';
+        }, 3000);
+    }
+
+    function fieldTarget(handle) {
+        return handle ? document.getElementById('fields-' + handle + '-field') : null;
+    }
+
+    function attempt() {
+        var target = match[1]
+            ? document.querySelector('.matrixblock[data-id="' + match[1] + '"]')
+            : fieldTarget(match[3]);
+
+        if (target) {
+            highlight(target);
+
+            return;
+        }
+
+        attempts++;
+
+        // The editor may still be laying out, so the target gets a few
+        // seconds to turn up before the block's field fallback is taken.
+        if (attempts < 8) {
+            window.setTimeout(attempt, 250);
+
+            return;
+        }
+
+        var fallback = fieldTarget(match[2]);
+
+        if (fallback) {
+            highlight(fallback);
+        }
+    }
+
+    window.setTimeout(attempt, 250);
+})();
+
+(function() {
+    'use strict';
+
+    function flash(target) {
+        var node = target.parentElement;
+
+        while (node && node !== document.body) {
+            if (node.id) {
+                var tab = document.querySelector('a[role="tab"][aria-controls="' + node.id + '"]');
+
+                if (tab) {
+                    if (tab.getAttribute('aria-selected') !== 'true') {
+                        tab.click();
+                    }
+
+                    break;
+                }
+            }
+
+            node = node.parentElement;
+        }
+
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.style.outline = '3px solid #e0326e';
+        target.style.outlineOffset = '3px';
+        target.style.boxShadow = '0 0 0 6px rgba(224, 50, 110, 0.15)';
+        target.style.borderRadius = 'var(--large-border-radius, 5px)';
+
+        window.setTimeout(function() {
+            target.style.outline = '';
+            target.style.outlineOffset = '';
+            target.style.boxShadow = '';
+            target.style.borderRadius = '';
+        }, 3000);
+    }
+
+    // A big rich text field is a poor answer to "where is it?", so the anchor
+    // itself is looked for inside the container, first by its href as typed
+    // and then by its text. Only when neither finds it does the whole field
+    // take the highlight.
+    function anchorWithin(container, rawHref, text) {
+        if (rawHref) {
+            var anchors = container.querySelectorAll('a[href]');
+
+            for (var i = 0; i < anchors.length; i++) {
+                if (anchors[i].getAttribute('href') === rawHref) {
+                    return anchors[i];
+                }
+            }
+        }
+
+        if (text) {
+            var candidates = container.querySelectorAll('a');
+
+            for (var j = 0; j < candidates.length; j++) {
+                if (candidates[j].textContent.trim() === text) {
+                    return candidates[j];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    // The broken addresses in the panel sit beside the very fields carrying
+    // them, so a click shows the spot rather than leaving the page. The href
+    // still points at the report page: when nothing on this page can be found
+    // to scroll to, a draft rebuilding block ids for instance without a field
+    // to fall back on, the ordinary navigation goes ahead instead.
+    document.querySelectorAll('.link-audit-panel__url > a[data-la-block], .link-audit-panel__url > a[data-la-field]').forEach(function(link) {
+        link.addEventListener('click', function(event) {
+            var container = null;
+            var blockId = link.getAttribute('data-la-block');
+            var fieldHandle = link.getAttribute('data-la-field');
+
+            if (blockId) {
+                container = document.querySelector('.matrixblock[data-id="' + blockId + '"]');
+            }
+
+            if (!container && fieldHandle) {
+                container = document.getElementById('fields-' + fieldHandle + '-field');
+            }
+
+            if (!container) {
+                return;
+            }
+
+            event.preventDefault();
+            flash(anchorWithin(
+                container,
+                link.getAttribute('data-la-href'),
+                link.getAttribute('data-la-text')
+            ) || container);
+        });
+    });
+
+    var recheck = document.getElementById('link-audit-panel-recheck');
+
+    if (!recheck) {
+        return;
+    }
+
+    recheck.addEventListener('click', function() {
+        if (recheck.classList.contains('loading')) {
+            return;
+        }
+
+        recheck.classList.add('loading');
+        recheck.setAttribute('aria-busy', 'true');
+
+        // Translated on the server: the plugin's JS translations are only
+        // registered on its own screens, and this panel is on Craft's.
+        var failedMessage = '{{ 'That did not work. Try again.'|t('link-audit')|e('js') }}';
+        var queuedLabel = '{{ 'Queued for checking'|t('link-audit')|e('js') }}';
+        var body = new FormData();
+        body.append(window.Craft.csrfTokenName || window.csrfTokenName, window.Craft.csrfTokenValue || window.csrfTokenValue);
+        body.append('elementId', recheck.getAttribute('data-element-id'));
+        body.append('siteId', recheck.getAttribute('data-site-id'));
+
+        fetch('{{ actionUrl('link-audit/url-actions/recheck-element')|e('js') }}', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+            body: body,
+        }).then(function(response) {
+            return response.json();
+        }).then(function(data) {
+            if (data && data.success) {
+                Craft.cp.displayNotice(data.message);
+                // Pressing it again before the queue has run would only queue
+                // the same work twice, so the button stands down until the
+                // page is next loaded.
+                recheck.disabled = true;
+                recheck.textContent = queuedLabel;
+            } else {
+                Craft.cp.displayError((data && data.message) || failedMessage);
+            }
+        }).catch(function() {
+            Craft.cp.displayError(failedMessage);
+        }).finally(function() {
+            recheck.classList.remove('loading');
+            recheck.removeAttribute('aria-busy');
+        });
+    });
+})();
+{% endjs %}

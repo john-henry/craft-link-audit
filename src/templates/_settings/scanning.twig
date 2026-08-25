@@ -186,6 +186,40 @@
         static: readOnly or config.excludedUriPatterns is defined,
     }) }}
 
+    {% set sectionOptions = [] %}
+    {% for section in craft.app.entries.getAllSections() %}
+        {% set sectionOptions = sectionOptions|merge([{ value: section.uid, label: section.name }]) %}
+    {% endfor %}
+
+    {{ forms.checkboxSelectField({
+        label: 'Excluded Sections'|t('link-audit'),
+        instructions: 'Sections to leave out of the audit altogether. An excluded section is fenced both ways: its entries are never read for links, and a link or relation pointing at one of its entries is recorded as ignored rather than judged. Use it for a section whose entries are data a template reads rather than pages anybody visits, the case the URI patterns above cannot reach, since those entries have no URI to match.'|t('link-audit'),
+        id: 'excludedSectionUids',
+        name: 'settings[excludedSectionUids]',
+        options: sectionOptions,
+        values: settings.excludedSectionUids,
+        warning: config.excludedSectionUids is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.excludedSectionUids is defined,
+    }) }}
+
+    {% set groupOptions = [] %}
+    {% for group in craft.app.categories.getAllGroups() %}
+        {% set groupOptions = groupOptions|merge([{ value: group.uid, label: group.name }]) %}
+    {% endfor %}
+
+    {% if groupOptions|length %}
+        {{ forms.checkboxSelectField({
+            label: 'Excluded Category Groups'|t('link-audit'),
+            instructions: 'The same fence for taxonomy. A category group without its own pages is the usual way categories are built, and a link or relation pointing at one of its categories should not be reported broken for having no page.'|t('link-audit'),
+            id: 'excludedCategoryGroupUids',
+            name: 'settings[excludedCategoryGroupUids]',
+            options: groupOptions,
+            values: settings.excludedCategoryGroupUids,
+            warning: config.excludedCategoryGroupUids is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+            disabled: readOnly or config.excludedCategoryGroupUids is defined,
+        }) }}
+    {% endif %}
+
     {{ forms.editableTableField({
         label: 'Always Valid Internal URLs'|t('link-audit'),
         instructions: 'Internal addresses that are fine even though nothing in the database answers to them: a route another plugin registers at runtime, a file the web server hands out itself, that sort of thing. Each row is a regular expression tested against the URI, so <code>^api/</code> covers everything under that path. A match is taken on trust and never asked for over HTTP, so this is also how you keep a scan away from a path that should not be requested at all.'|t('link-audit'),

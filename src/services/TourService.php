@@ -158,9 +158,14 @@ class TourService extends Component
                 'text' => Craft::t('link-audit', 'When the last scan ran and how long it took. If this is old, the counts are old too.'),
             ],
             [
-                'selector' => '#link-audit-worst',
+                'selector' => '#link-audit-start',
                 'title' => Craft::t('link-audit', 'Where to start'),
-                'text' => Craft::t('link-audit', 'The hosts and pages carrying the most broken links. Start here when there is a lot to do: fixing one page often clears several.'),
+                'text' => Craft::t('link-audit', 'A suggested working order for a long broken list: your own pages first, then the few addresses whose one fix clears the most places.'),
+            ],
+            [
+                'selector' => '#link-audit-worst',
+                'title' => Craft::t('link-audit', 'The worst offenders'),
+                'text' => Craft::t('link-audit', 'The hosts and pages carrying the most broken links. Fixing one page often clears several.'),
             ],
             [
                 'selector' => '#link-audit-tour-start',

@@ -219,7 +219,7 @@ abstract class BaseController extends Controller
     {
         $filters = [];
 
-        foreach (['host', 'elementType', 'source', 'permanent'] as $key) {
+        foreach (['host', 'elementType', 'source', 'permanent', 'internal'] as $key) {
             $filters[$key] = trim((string)($this->request->getParam($key) ?? ''));
         }
 

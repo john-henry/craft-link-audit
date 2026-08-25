@@ -102,7 +102,12 @@ describe('UrlsController::actionDetail', function() {
             // The Edit link opens the entry the author can actually edit, not
             // the block the link was stored against.
             ->assertSee($entry->getCpEditUrl())
-            ->assertSee('(in a block)');
+            // The fragment the edit screen's scroller turns into a scroll to
+            // the block itself.
+            ->assertSee('#la-block-' . $block->id, false)
+            // Named by the block's own type, so the author knows which block
+            // on the page to open.
+            ->assertSee('(in a ' . $block->getType()->name . ' block)');
     });
 
     it('shows the verdict it holds', function() {

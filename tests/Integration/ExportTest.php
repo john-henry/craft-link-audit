@@ -232,6 +232,13 @@ describe('The export service', function() {
         $rows = exportRows(exportCsv(UrlStatus::Broken, [exportSiteId()]));
 
         expect($rows[0])->toBe([
+            'Page',
+            'Edit URL',
+            'Page URL',
+            'Page Type',
+            'Site',
+            'Field',
+            'Link Text',
             'URL',
             'Verdict',
             'Reason',
@@ -239,11 +246,6 @@ describe('The export service', function() {
             'Redirect Code',
             'Goes To',
             'Host',
-            'Page',
-            'Page Type',
-            'Site',
-            'Field',
-            'Link Text',
             'Found Via',
             'Places Total',
             'First Seen',
@@ -273,12 +275,12 @@ describe('The export service', function() {
         expect($rows)->toHaveCount(4);
 
         foreach (array_slice($rows, 1) as $row) {
-            expect($row[0])->toBe('https://example.com/in-three-places')
-                ->and($row[13])->toBe('3');
+            expect($row[7])->toBe('https://example.com/in-three-places')
+                ->and($row[15])->toBe('3');
         }
 
         // Three rows, three different pages named on them.
-        expect(array_unique(array_column(array_slice($rows, 1), 7)))->toHaveCount(3);
+        expect(array_unique(array_column(array_slice($rows, 1), 0)))->toHaveCount(3);
     });
 
     // The Page column names the page an editor opens, which is the owner. The
@@ -308,10 +310,16 @@ describe('The export service', function() {
         $row = exportRows(exportCsv(UrlStatus::Broken, [$siteId]))[1];
         $reference = LinkAudit::getInstance()->getReportService()->references($urlId, [$siteId])[0];
 
-        expect($row[10])->toBe('Block Body')
+        $block = $entry->getFieldValue('laBlocks')->one();
+
+        expect($row[5])->toBe('Block Body')
             // The same label the URL detail screen puts on the same reference.
             ->and($reference['fieldName'])->toBe('Block Body')
-            ->and($row[7])->toBe($entry->getUiLabel());
+            ->and($row[0])->toBe($entry->getUiLabel())
+            // The same Edit link the detail screen offers, block fragment and
+            // all, so the file and the screen agree on where the work is.
+            ->and($row[1])->toBe($entry->getCpEditUrl() . '#la-block-' . $block->id . '--laBlocks')
+            ->and($row[2])->toBe($entry->getUrl());
     });
 
     it('says what the screen says, not what the database holds', function() {
@@ -327,14 +335,14 @@ describe('The export service', function() {
 
         $row = exportRows(exportCsv(UrlStatus::Unreachable, [exportSiteId()]))[1];
 
-        expect($row[1])->toBe('No Answer')
-            ->and($row[2])->toBe('Timed out')
-            ->and($row[3])->toBe('503')
-            ->and($row[6])->toBe('example.com')
-            ->and($row[8])->toBe('User')
-            ->and($row[9])->toBe(Craft::$app->getSites()->getPrimarySite()->name)
-            ->and($row[11])->toBe('Our brochure')
-            ->and($row[12])->toBe('A navigation');
+        expect($row[8])->toBe('No Answer')
+            ->and($row[9])->toBe('Timed out')
+            ->and($row[10])->toBe('503')
+            ->and($row[13])->toBe('example.com')
+            ->and($row[3])->toBe('User')
+            ->and($row[4])->toBe(Craft::$app->getSites()->getPrimarySite()->name)
+            ->and($row[6])->toBe('Our brochure')
+            ->and($row[14])->toBe('A navigation');
     });
 
     it('carries both redirect codes and where the link ends up', function() {
@@ -353,10 +361,10 @@ describe('The export service', function() {
 
         $row = exportRows(exportCsv(UrlStatus::Redirect, [exportSiteId()]))[1];
 
-        expect($row[1])->toBe('Redirect')
-            ->and($row[3])->toBe('200')
-            ->and($row[4])->toBe('301')
-            ->and($row[5])->toBe('https://example.com/the-new-place');
+        expect($row[8])->toBe('Redirect')
+            ->and($row[10])->toBe('200')
+            ->and($row[11])->toBe('301')
+            ->and($row[12])->toBe('https://example.com/the-new-place');
     });
 
     it('writes the dates for a machine rather than for a sentence', function() {
@@ -366,8 +374,8 @@ describe('The export service', function() {
 
         $row = exportRows(exportCsv(UrlStatus::Broken, [exportSiteId()]))[1];
 
-        expect($row[14])->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/')
-            ->and($row[15])->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/');
+        expect($row[16])->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/')
+            ->and($row[17])->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/');
     });
 
     it('keeps each verdict to its own file', function() {
@@ -411,7 +419,7 @@ describe('The export service', function() {
         $rows = array_slice(exportRows(exportCsv(UrlStatus::Broken, [exportSiteId()])), 1);
 
         expect($rows)->toHaveCount($wanted)
-            ->and(array_unique(array_column($rows, 10)))->toHaveCount($wanted);
+            ->and(array_unique(array_column($rows, 5)))->toHaveCount($wanted);
     });
 
     it('names the file after the list and the day', function() {
@@ -464,7 +472,7 @@ describe('The filters', function() {
         );
 
         expect($rows)->toHaveCount(1)
-            ->and($rows[0][13])->toBe('1');
+            ->and($rows[0][15])->toBe('1');
     });
 
     it('honours what was typed into the table\'s search box', function() {
@@ -777,7 +785,7 @@ describe('A cell a spreadsheet would run', function() {
 
         $row = exportRows(exportCsv(UrlStatus::Broken, [exportSiteId()]))[1];
 
-        expect($row[11])->toBe("'=cmd|' /c calc'!A1");
+        expect($row[6])->toBe("'=cmd|' /c calc'!A1");
     });
 
     it('covers every leader a spreadsheet acts on', function() {
@@ -797,7 +805,7 @@ describe('A cell a spreadsheet would run', function() {
         expect($rows)->toHaveCount(count($leaders));
 
         foreach ($rows as $row) {
-            expect($row[11])->toStartWith("'");
+            expect($row[6])->toStartWith("'");
         }
     });
 
@@ -808,7 +816,7 @@ describe('A cell a spreadsheet would run', function() {
 
         $row = exportRows(exportCsv(UrlStatus::Broken, [exportSiteId()]))[1];
 
-        expect($row[11])->toBe('Read the brochure')
-            ->and($row[0])->toBe('https://example.com/ordinary');
+        expect($row[6])->toBe('Read the brochure')
+            ->and($row[7])->toBe('https://example.com/ordinary');
     });
 });

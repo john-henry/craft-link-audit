@@ -1,5 +1,21 @@
 # Release Notes for Link Audit
 
+## 1.0.0-beta.6 - 2026-08-25
+
+### Added
+- A Where to start pane on the Overview, shown while anything is broken. On a site with thousands of broken links a wall of counts answers how bad it is and nothing else, so the pane offers a working order: the broken links pointing at your own sites first, since those are yours to fix without waiting on anybody, then the handful of addresses sitting in the most places, where one fix clears hundreds of rows at once, then the fresh arrivals: what was still working a week ago and what the last scan saw for the first time, since fresh breakage is worth catching before it settles into the pile. It finishes with what not to bother with at all.
+- A Points At filter on the list screens, splitting links to your own sites from links to other websites. The CSV download honours it like the other filters.
+- An Excluded Sections setting on the Scanning tab, for sections whose entries are data a template reads rather than pages anybody visits. An excluded section is fenced both ways: its entries are never read for links, and a link or relation pointing at one of its entries is recorded as ignored instead of being reported broken for having no page. This is the answer for URL-less sections, which the Excluded URI Patterns setting cannot reach since their entries have no URI to match. An Excluded Category Groups setting does the same for taxonomy, where having no pages is the norm rather than the exception.
+- The CSV export now carries an Edit URL column, a link straight into each page's edit screen in the control panel, and a Page URL column with the page's public address. A page title in a spreadsheet was only half an answer: the person handed the file can now click through and fix the link rather than go searching by title.
+
+### Changed
+- Element links whose target has no URL of its own now show the target's title on the list screens, the URL detail page, the entry sidebar panel and the Where to start pane, instead of an internal `element:<id>` marker that names nothing an editor recognises. The detail page says plainly that such a link has no address to open or copy.
+- Edit links on the URL detail page, and the Edit URL column in the CSV, now land where the work is: a link in a top-level field scrolls the edit screen to that field, and a link inside a Matrix block scrolls to the block itself and gives it a flash of outline so it is easy to spot. A field or block sitting on another tab has its tab opened first, and when a block cannot be found on the page at all, being edited through a draft for instance, the Matrix field holding it is scrolled to instead.
+- The links panel on an entry's edit screen earned its keep: the broken addresses in it now scroll to the very anchor carrying the link, right there in the field, rather than leaving the page, with the report page one click away on the code badge, and a new Check this page again button rereads the page and queues a fresh check of everything it links to, so a fix shows up while the editor is still looking at it. The panel now sits at the top of the sidebar additions, above the informational panels, since it is the one with work in it.
+- A link found inside a Matrix block now says which kind of block it is in: the Where it appears table reads "(in a Stats and Image block)" rather than "(in a block)", using the name on the block's own header, so the author knows which block on the page to open.
+- The CSV columns now lead with the place and follow with the link: Page, Edit URL, Page URL, Page Type, Site, Field, Link Text, then the URL and its verdict, codes and dates. A row in this file is a place a link appears, so the file now reads as the work list it is. Anything parsing the old column order will need updating.
+- The Redirects screen's opening line now says plainly what the two address columns mean: URL is the address as written in your content, Goes To is where the server actually sends anybody who follows it.
+
 ## 1.0.0-beta.5 - 2026-08-24
 
 ### Fixed

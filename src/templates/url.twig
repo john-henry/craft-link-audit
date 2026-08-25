@@ -45,8 +45,12 @@
             {% if isOpenable %}
                 <a href="{{ url.url }}" target="_blank" rel="noopener noreferrer" data-icon="external" style="display:inline-flex;align-items:center;gap:6px">{{ url.url }}</a>
             {% else %}
-                {{ url.url }}
-                <span class="light">{{ 'Not opened from here: the plugin only follows http and https.'|t('link-audit') }}</span>
+                {{ urlLabel }}
+                {% if urlLabel == url.url %}
+                    <span class="light">{{ 'Not opened from here: the plugin only follows http and https.'|t('link-audit') }}</span>
+                {% else %}
+                    <span class="light">{{ 'An element link with no address of its own, so there is nothing to open or copy.'|t('link-audit') }}</span>
+                {% endif %}
             {% endif %}
         </p>
 
@@ -244,7 +248,11 @@
                                     <span class="light">{{ 'Gone'|t('link-audit') }}</span>
                                 {% endif %}
                                 {% if reference.nested %}
-                                    <span class="light">{{ '(in a block)'|t('link-audit') }}</span>
+                                    <span class="light">
+                                        {{ reference.blockType
+                                            ? '(in a {type} block)'|t('link-audit', { type: reference.blockType })
+                                            : '(in a block)'|t('link-audit') }}
+                                    </span>
                                 {% endif %}
                             </td>
                             <td>{{ reference.elementType }}</td>
