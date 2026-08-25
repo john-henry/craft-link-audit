@@ -100,7 +100,7 @@ class ExportService extends Component
      * @param int[] $siteIds The sites to read references on. The caller fences
      *                       this: nothing here checks who is asking.
      * @param array<string, mixed> $filters Any of `host`, `elementType`,
-     *                                      `source`, `permanent` and `search`,
+     *                                      `source`, `permanent`, `internal` and `search`,
      *                                      exactly as the list screen carries
      *                                      them.
      * @return Generator<int, string> The file, in chunks.
@@ -156,7 +156,7 @@ class ExportService extends Component
      * @param UrlStatus $status The verdict being exported.
      * @param int[] $siteIds The sites to read references on.
      * @param array<string, mixed> $filters Any of `host`, `elementType`,
-     *                                      `source`, `permanent` and `search`.
+     *                                      `source`, `permanent`, `internal` and `search`.
      * @return int The number of reference rows.
      * @author John Henry Donovan
      * @since 1.0.0
@@ -466,6 +466,11 @@ class ExportService extends Component
     /**
      * The column headings.
      *
+     * The place leads and the link follows, because a row here is a place: the
+     * person working down the file opens pages, so the page, the two links that
+     * get them to it, and where on it to look come first, and the address being
+     * reported on comes after with its verdict beside it.
+     *
      * @return array<int, string> The heading row.
      * @author John Henry Donovan
      * @since 1.0.0
@@ -473,6 +478,13 @@ class ExportService extends Component
     private function _header(): array
     {
         return [
+            Craft::t('link-audit', 'Page'),
+            Craft::t('link-audit', 'Edit URL'),
+            Craft::t('link-audit', 'Page URL'),
+            Craft::t('link-audit', 'Page Type'),
+            Craft::t('link-audit', 'Site'),
+            Craft::t('link-audit', 'Field'),
+            Craft::t('link-audit', 'Link Text'),
             Craft::t('link-audit', 'URL'),
             Craft::t('link-audit', 'Verdict'),
             Craft::t('link-audit', 'Reason'),
@@ -480,11 +492,6 @@ class ExportService extends Component
             Craft::t('link-audit', 'Redirect Code'),
             Craft::t('link-audit', 'Goes To'),
             Craft::t('link-audit', 'Host'),
-            Craft::t('link-audit', 'Page'),
-            Craft::t('link-audit', 'Page Type'),
-            Craft::t('link-audit', 'Site'),
-            Craft::t('link-audit', 'Field'),
-            Craft::t('link-audit', 'Link Text'),
             Craft::t('link-audit', 'Found Via'),
             Craft::t('link-audit', 'Places Total'),
             Craft::t('link-audit', 'First Seen'),
@@ -620,6 +627,12 @@ class ExportService extends Component
             $query->andWhere(['u.redirectPermanent' => $permanent === '1']);
         }
 
+        $internal = trim((string)($filters['internal'] ?? ''));
+
+        if ($internal !== '') {
+            $query->andWhere(['u.isInternal' => $internal === '1']);
+        }
+
         // The same match {@see ReportService::_urlQuery()} makes, so a reader
         // who typed something into the table's search box and then pressed
         // Download gets the rows they were looking at rather than the whole
@@ -681,6 +694,17 @@ class ExportService extends Component
         $source = (string)$row['source'];
 
         return array_map($this->_cell(...), [
+            // An element that will not load leaves its columns blank rather
+            // than guessed at. It means the page has gone since the last scan,
+            // and its id would be no use to anybody opening this file to fix
+            // content.
+            $element?->getUiLabel(),
+            $element !== null ? $report->referenceEditUrl($element, $row, $fieldElement) : null,
+            $element?->getUrl(),
+            $report->elementTypeLabel((string)$row['elementType']),
+            $site?->name,
+            $report->fieldName($row, $fieldElement),
+            $row['linkText'],
             $row['url'],
             $status->label(),
             Verdict::reasonLabel($row['reason'] !== null ? (string)$row['reason'] : null),
@@ -688,14 +712,6 @@ class ExportService extends Component
             $row['redirectStatus'],
             $row['finalUrl'],
             $row['host'],
-            // An element that will not load is left blank rather than guessed
-            // at. It means the page has gone since the last scan, and its id
-            // would be no use to anybody opening this file to fix content.
-            $element?->getUiLabel(),
-            $report->elementTypeLabel((string)$row['elementType']),
-            $site?->name,
-            $report->fieldName($row, $fieldElement),
-            $row['linkText'],
             $sourceLabels[$source] ?? $source,
             $places[(int)$row['urlId']] ?? 1,
             $this->_date($row['dateFirstSeen']),

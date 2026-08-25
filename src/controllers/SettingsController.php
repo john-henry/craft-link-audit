@@ -279,6 +279,8 @@ class SettingsController extends BaseController
         $settings = $this->_beginSave();
 
         $settings->scannedElementTypes = $this->_elementTypes($settings->scannedElementTypes);
+        $settings->excludedSectionUids = $this->_uidList('excludedSectionUids', $settings->excludedSectionUids);
+        $settings->excludedCategoryGroupUids = $this->_uidList('excludedCategoryGroupUids', $settings->excludedCategoryGroupUids);
         $settings->scanOnSave = $this->_bool('scanOnSave', $settings->scanOnSave);
         $settings->checkInternalLinks = $this->_bool('checkInternalLinks', $settings->checkInternalLinks);
         $settings->checkImages = $this->_bool('checkImages', $settings->checkImages);
@@ -415,6 +417,36 @@ class SettingsController extends BaseController
 
         if (!is_array($posted)) {
             return $current;
+        }
+
+        return array_values(array_filter(array_map('strval', $posted)));
+    }
+
+    /**
+     * A posted list of UIDs off a checkbox select.
+     *
+     * A checkbox select with nothing ticked posts an empty string rather than
+     * an array, and that is a real answer: it means every box was cleared, so
+     * it empties the setting rather than keeping the old one. Only a missing
+     * parameter altogether keeps what was stored.
+     *
+     * @param string $key The setting the field posts as.
+     * @param string[] $current The stored value, kept when the field was not
+     *                          posted at all.
+     * @return string[] The value.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _uidList(string $key, array $current): array
+    {
+        $posted = $this->request->getBodyParam("settings[$key]");
+
+        if ($posted === null) {
+            return $current;
+        }
+
+        if (!is_array($posted)) {
+            return [];
         }
 
         return array_values(array_filter(array_map('strval', $posted)));

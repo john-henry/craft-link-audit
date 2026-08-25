@@ -13,6 +13,7 @@ use DateTime;
 use Exception;
 use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\LinkAudit;
+use Throwable;
 use yii\web\BadRequestHttpException;
 use yii\web\ForbiddenHttpException;
 use yii\web\NotFoundHttpException;
@@ -128,6 +129,59 @@ class UrlActionsController extends BaseController
             Craft::t('link-audit', 'Checked: {verdict}.', ['verdict' => $status->label()]),
             ['verdict' => $this->_verdictPayload($fresh, $status)],
         );
+    }
+
+    /**
+     * Rereads one page and queues a fresh check of everything it links to.
+     *
+     * The links panel's button. Queued rather than inline, unlike the one-URL
+     * recheck above: a page can carry dozens of links, and dozens of outbound
+     * requests are the queue's job, not a browser request's. The panel says
+     * so, and the counts catch up when the queue has been through them.
+     *
+     * @return Response JSON.
+     * @throws BadRequestHttpException If the request is not a POST that accepts
+     *                                 JSON.
+     * @throws ForbiddenHttpException If the user may not run scans, or may not
+     *                                edit the site.
+     * @throws Throwable If the element's reference rows cannot be rebuilt.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function actionRecheckElement(): Response
+    {
+        $this->requirePostRequest();
+        $this->requirePermission(self::PERMISSION_RUN_SCANS);
+        $this->requireAcceptsJson();
+
+        $elementId = (int)$this->request->getRequiredBodyParam('elementId');
+        $siteId = (int)$this->request->getRequiredBodyParam('siteId');
+
+        if (!in_array($siteId, $this->allowedSiteIds(), true)) {
+            throw new ForbiddenHttpException(
+                Craft::t('link-audit', 'You are not allowed to edit that site.'),
+            );
+        }
+
+        $count = LinkAudit::$plugin->getScanService()->recheckElementLinks($elementId, $siteId);
+
+        if ($count === 0) {
+            return $this->asJson([
+                'success' => true,
+                'count' => 0,
+                'message' => Craft::t('link-audit', 'The page was read again and carries no links to check.'),
+            ]);
+        }
+
+        return $this->asJson([
+            'success' => true,
+            'count' => $count,
+            'message' => Craft::t(
+                'link-audit',
+                'The page was read again and {count, plural, one{its link is} other{its # links are}} queued for a fresh check. The panel catches up once the queue has been through them.',
+                ['count' => $count],
+            ),
+        ]);
     }
 
     /**

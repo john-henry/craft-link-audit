@@ -149,6 +149,7 @@ class UrlsController extends BaseController
             'siteHandle' => $site->handle,
             'sites' => $this->allowedSites(),
             'url' => $url,
+            'urlLabel' => $report->urlLabel((string)$url['url'], (int)$site->id),
             'statusLabel' => $status->label(),
             'statusColour' => $status->colour(),
             'reasonLabel' => Verdict::reasonLabel($url['reason'] !== null ? (string)$url['reason'] : null),
@@ -270,7 +271,7 @@ class UrlsController extends BaseController
         return $this->asJson([
             'success' => true,
             'pagination' => AdminTable::paginationLinks($page, $result['total'], $perPage),
-            'data' => array_map(fn(array $row): array => $this->_row($row), $result['rows']),
+            'data' => array_map(fn(array $row): array => $this->_row($row, $siteId), $result['rows']),
         ]);
     }
 
@@ -411,11 +412,13 @@ class UrlsController extends BaseController
      * One URL row in the shape the table wants.
      *
      * @param array<string, mixed> $row The row from the report service.
+     * @param int $siteId The site the table is being read on, for the label a
+     *                    stand-in row borrows from its target element.
      * @return array<string, mixed> The row for the table.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function _row(array $row): array
+    private function _row(array $row, int $siteId): array
     {
         $status = UrlStatus::tryFrom((string)$row['status']) ?? UrlStatus::Pending;
         $url = (string)$row['url'];
@@ -424,6 +427,7 @@ class UrlsController extends BaseController
             'id' => (int)$row['id'],
             'url' => [
                 'full' => $url,
+                'label' => LinkAudit::$plugin->getReportService()->urlLabel($url, $siteId),
                 'detailUrl' => UrlHelper::cpUrl('link-audit/url', ['hash' => (string)$row['urlHash']]),
                 'openable' => $this->_isOpenable($row),
                 // Stand-in rows for element links hold an internal marker, not

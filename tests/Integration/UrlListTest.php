@@ -39,7 +39,7 @@ function listClearTables(): void
 /**
  * Inserts a batch of URL rows, each with one reference on the primary site.
  *
- * @param array<int, array{url: string, status?: string, host?: string}> $urls
+ * @param array<int, array{url: string, status?: string, host?: string, isInternal?: bool}> $urls
  */
 function listSeed(array $urls, int $elementId): void
 {
@@ -54,7 +54,7 @@ function listSeed(array $urls, int $elementId): void
             $url['host'] ?? (string)parse_url($url['url'], PHP_URL_HOST),
             'https',
             null,
-            false,
+            $url['isInternal'] ?? false,
             $url['status'] ?? UrlStatus::Broken->value,
             404,
             $now,
@@ -153,6 +153,20 @@ describe('The table endpoint', function() {
 
         expect(array_intersect($firstIds, $secondIds))->toBe([])
             ->and($second['data'])->toHaveCount(50);
+    });
+
+    it('labels a stand-in row with its target element rather than its storage key', function() {
+        $target = UserFactory::factory()->create();
+        listSeed([['url' => 'element:' . $target->id, 'host' => '', 'isInternal' => true]], (int)UserFactory::factory()->create()->id);
+
+        $json = listTable(['search' => 'element:' . $target->id]);
+        $expected = Craft::$app->getElements()
+            ->getElementById((int)$target->id, null, (int)Craft::$app->getSites()->getPrimarySite()->id)
+            ?->getUiLabel();
+
+        expect($json['data'][0]['url']['label'])->toBe($expected)
+            ->and($json['data'][0]['url']['full'])->toBe('element:' . $target->id)
+            ->and($json['data'][0]['url']['copyable'])->toBeFalse();
     });
 
     it('sorts by host in both directions', function() {
@@ -396,6 +410,22 @@ describe('ReportService::urlCount', function() {
         $siteId = (int)Craft::$app->getSites()->getPrimarySite()->id;
 
         expect($report->urlCount(UrlStatus::Broken, $siteId, ['host' => 'filtered.example']))->toBe(2);
+    });
+
+    it('splits your own sites from other websites when asked to', function() {
+        listSeed([
+            ['url' => 'https://this-site.example/own-page', 'isInternal' => true],
+            ['url' => 'https://elsewhere.example/theirs'],
+        ], (int)UserFactory::factory()->create()->id);
+
+        $report = LinkAudit::getInstance()->getReportService();
+        $siteId = (int)Craft::$app->getSites()->getPrimarySite()->id;
+
+        expect($report->urlCount(UrlStatus::Broken, $siteId, ['internal' => '1']))->toBe(1)
+            ->and($report->urlCount(UrlStatus::Broken, $siteId, ['internal' => '0']))->toBe(1)
+            ->and($report->urlCount(UrlStatus::Broken, $siteId))->toBe(2)
+            ->and($report->urlTable(UrlStatus::Broken, $siteId, ['internal' => '1'], 1, 10)['rows'][0]['url'])
+            ->toBe('https://this-site.example/own-page');
     });
 
     it('counts nothing when nothing on this site points at any of it', function() {

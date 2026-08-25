@@ -42,6 +42,14 @@ return [
     // Re-extract an element's links when it is saved.
     // 'scanOnSave' => true,
 
+    // Section UIDs left out of the audit altogether: their entries are never
+    // read, and links pointing at their entries are recorded as ignored. For
+    // sections whose entries are data a template reads rather than pages.
+    // 'excludedSectionUids' => [],
+
+    // The same fence for category groups, where having no pages is the norm.
+    // 'excludedCategoryGroupUids' => [],
+
     // Resolve internal links against the site's own elements and routes.
     // 'checkInternalLinks' => true,
 

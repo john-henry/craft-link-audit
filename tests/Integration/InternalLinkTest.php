@@ -372,6 +372,52 @@ it('records a relation link as ignored when internal checking is off', function(
 });
 
 // ---------------------------------------------------------------------------
+// Excluded sections
+// ---------------------------------------------------------------------------
+
+it('records a link to an entry in an excluded section as ignored, whatever state the target is in', function() {
+    // Disabled and URL-less: without the exclusion this target would be judged
+    // broken twice over. The exclusion says its entries are rendered some
+    // other way, so no judgement is made at all.
+    $target = ilNoUrlEntry(enabled: false);
+    LinkAudit::getInstance()->getSettings()->excludedSectionUids = [
+        (string)Craft::$app->getEntries()->getSectionByHandle('collection')?->uid,
+    ];
+
+    $link = ilResolver()->resolveElement($target->id, Entry::class, ilSiteId());
+    $relation = ilResolver()->resolveElement($target->id, Entry::class, ilSiteId(), isRelation: true);
+
+    expect($link->status)->toBe(UrlStatus::Ignored)
+        ->and($relation->status)->toBe(UrlStatus::Ignored);
+});
+
+it('records a link to a category in an excluded group as ignored', function() {
+    $group = Craft::$app->getCategories()->getGroupByHandle('colors');
+    expect($group)->not->toBeNull();
+
+    $category = new craft\elements\Category();
+    $category->groupId = (int)$group->id;
+    $category->title = 'IL colour ' . StringHelper::randomString(8);
+    Craft::$app->getElements()->saveElement($category);
+
+    LinkAudit::getInstance()->getSettings()->excludedCategoryGroupUids = [(string)$group->uid];
+
+    $verdict = ilResolver()->resolveElement((int)$category->id, craft\elements\Category::class, ilSiteId());
+
+    expect($verdict->status)->toBe(UrlStatus::Ignored);
+});
+
+it('never reads the fields of an entry in an excluded section', function() {
+    $entry = ilEntry();
+    LinkAudit::getInstance()->getSettings()->excludedSectionUids = [
+        (string)Craft::$app->getEntries()->getSectionByHandle('laFixture')?->uid,
+    ];
+
+    expect(LinkAudit::getInstance()->getScanService()->extractElement((int)$entry->id, Entry::class, ilSiteId()))
+        ->toBeNull();
+});
+
+// ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
 

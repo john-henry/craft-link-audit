@@ -319,6 +319,16 @@ describe('The links panel guards', function() {
         expect(sidebarHtml($entry))->not->toContain('link-audit-panel');
     });
 
+    it('renders nothing on an entry in an excluded section', function() {
+        $entry = sidebarEntry('<p><a href="https://example.com/sidebar-section-excluded">A link</a></p>');
+
+        LinkAudit::getInstance()->getSettings()->excludedSectionUids = [
+            (string)Craft::$app->getEntries()->getSectionByHandle('laFixture')?->uid,
+        ];
+
+        expect(sidebarHtml($entry))->not->toContain('link-audit-panel');
+    });
+
     it('renders nothing for somebody who may not read the reports', function() {
         $entry = sidebarEntry('<p><a href="https://example.com/sidebar-unpermitted">A link</a></p>');
         sidebarExtract($entry);
@@ -365,5 +375,33 @@ describe('Restoring an element', function() {
         Craft::$app->getElements()->restoreElement($entry);
 
         expect(sidebarJobCount() - $before)->toBe(0);
+    });
+});
+
+describe('The check-this-page-again button', function() {
+    it('rereads the page and brings its links forward for a fresh check', function() {
+        $entry = sidebarEntry('<p><a href="https://example.com/sidebar-recheck-me">Fix me</a></p>');
+        sidebarExtract($entry);
+
+        // A verdict with a long shelf life, so nothing here is stale by
+        // accident: only the button's own bring-forward can make it pending.
+        sidebarSetStatus('https://example.com/sidebar-recheck-me', UrlStatus::Ok, 200);
+        Craft::$app->getDb()->createCommand()
+            ->update(
+                UrlRecord::tableName(),
+                ['nextCheckAfter' => Db::prepareDateForDb(new DateTime('+20 days'))],
+                ['urlHash' => sha1('https://example.com/sidebar-recheck-me')],
+            )
+            ->execute();
+
+        $count = LinkAudit::getInstance()->getScanService()
+            ->recheckElementLinks((int)$entry->id, (int)$entry->siteId);
+
+        expect($count)->toBeGreaterThan(0)
+            ->and((int)(new Query())
+                ->from([UrlRecord::tableName()])
+                ->where(['urlHash' => sha1('https://example.com/sidebar-recheck-me')])
+                ->andWhere(['<', 'nextCheckAfter', Db::prepareDateForDb(new DateTime())])
+                ->count())->toBe(1);
     });
 });

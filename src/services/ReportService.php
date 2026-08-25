@@ -84,6 +84,16 @@ class ReportService extends Component
     private const _COUNTS_TTL = 60;
 
     // =========================================================================
+    // Private Properties
+    // =========================================================================
+
+    /**
+     * @var string[]|null The hosts this installation's sites answer on, memoised
+     * for the request. Kept by {@see self::_siteHosts()}.
+     */
+    private ?array $_siteHostsMemo = null;
+
+    // =========================================================================
     // Public Methods
     // =========================================================================
 
@@ -148,7 +158,7 @@ class ReportService extends Component
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    public function elementSummary(int $elementId, int $siteId, int $limit = 5): array
+    public function elementSummary(int $elementId, int $siteId, int $limit = 10): array
     {
         $rows = (new Query())
             ->select([
@@ -191,7 +201,7 @@ class ReportService extends Component
         }
 
         $brokenUrls = $broken === 0 ? [] : (new Query())
-            ->select(['url' => 'u.url', 'urlHash' => 'u.urlHash', 'httpStatus' => 'u.httpStatus'])
+            ->select(['urlId' => 'u.id', 'url' => 'u.url', 'urlHash' => 'u.urlHash', 'httpStatus' => 'u.httpStatus'])
             ->distinct()
             ->from(['r' => ReferenceRecord::tableName()])
             ->innerJoin(['u' => UrlRecord::tableName()], '[[u.id]] = [[r.urlId]]')
@@ -201,10 +211,18 @@ class ReportService extends Component
             ->limit($limit)
             ->all();
 
+        $locations = $this->_urlLocationsOnElement($brokenUrls, $elementId, $siteId);
+
         foreach ($brokenUrls as $i => $brokenUrl) {
             $brokenUrls[$i]['httpStatusLabel'] = Verdict::httpStatusLabel(
                 $brokenUrl['httpStatus'] !== null ? (int)$brokenUrl['httpStatus'] : null,
             );
+            $brokenUrls[$i]['label'] = $this->urlLabel((string)$brokenUrl['url'], $siteId);
+            $brokenUrls[$i]['shortLabel'] = $this->_panelLabel($brokenUrls[$i]['label']);
+            $brokenUrls[$i]['blockId'] = $locations[(int)$brokenUrl['urlId']]['blockId'] ?? null;
+            $brokenUrls[$i]['fieldHandle'] = $locations[(int)$brokenUrl['urlId']]['fieldHandle'] ?? null;
+            $brokenUrls[$i]['rawHref'] = $locations[(int)$brokenUrl['urlId']]['rawHref'] ?? null;
+            $brokenUrls[$i]['linkText'] = $locations[(int)$brokenUrl['urlId']]['linkText'] ?? null;
         }
 
         return [
@@ -486,15 +504,31 @@ class ReportService extends Component
             $fieldElement = (int)$row['elementId'] === $ownerId
                 ? $element
                 : $elements->getElementById((int)$row['elementId'], null, $siteId);
+            $nested = $row['ownerElementId'] !== null
+                && (int)$row['ownerElementId'] !== (int)$row['elementId'];
+
+            // The block's own type name, so the screen can say which block on
+            // the page to open rather than only that there is one. Its entry
+            // type carries the name the author sees on the block's header.
+            $blockType = null;
+
+            if ($nested && $fieldElement instanceof Entry) {
+                try {
+                    $blockType = $fieldElement->getType()->name;
+                } catch (Throwable) {
+                    // A block whose type is gone still names its page and field.
+                }
+            }
 
             $references[] = [
                 'element' => $element,
                 'elementType' => $this->elementTypeLabel((string)$row['elementType']),
-                'editUrl' => $canView ? $element->getCpEditUrl() : null,
+                'editUrl' => $canView ? $this->referenceEditUrl($element, $row, $fieldElement) : null,
                 'fieldHandle' => $row['fieldHandle'] !== null ? (string)$row['fieldHandle'] : null,
                 'fieldName' => $this->fieldName($row, $fieldElement),
+                'blockType' => $blockType,
                 'linkText' => $row['linkText'] !== null ? (string)$row['linkText'] : null,
-                'nested' => $row['ownerElementId'] !== null && (int)$row['ownerElementId'] !== (int)$row['elementId'],
+                'nested' => $nested,
                 'rawHref' => $row['rawHref'] !== null ? (string)$row['rawHref'] : null,
                 'site' => Craft::$app->getSites()->getSiteById($siteId),
                 'source' => (string)$row['source'],
@@ -585,6 +619,359 @@ class ReportService extends Component
     }
 
     /**
+     * How many broken URLs on a site point at this installation's own sites.
+     *
+     * For the Where to start pane. An internal broken link is the one kind an
+     * editor can always fix without waiting on anybody else, so it is the
+     * first suggestion the pane makes.
+     *
+     * @param int $siteId The site being read.
+     * @return int The count.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function internalBrokenCount(int $siteId): int
+    {
+        return (int)(new Query())
+            ->from(['u' => UrlRecord::tableName()])
+            ->where(['u.status' => UrlStatus::Broken->value, 'u.isInternal' => true])
+            ->andWhere(['exists', $this->_referencedOnSite($siteId)])
+            ->count();
+    }
+
+    /**
+     * How many of a site's broken URLs were still working at a given moment.
+     *
+     * For the Where to start pane. A link that was answering last week and is
+     * broken now is a fresh regression, a much shorter list than everything
+     * that has ever broken and the one most worth catching early. Counted off
+     * the last time each URL was known to work, not off when it last failed:
+     * every recheck of a broken URL stamps the failure date again, so "failed
+     * recently" describes the whole backlog and says nothing.
+     *
+     * @param int $siteId The site being read.
+     * @param DateTimeInterface $workedSince Count URLs last known working at or
+     *                                       after this moment.
+     * @return int The count.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function recentlyBrokenCount(int $siteId, DateTimeInterface $workedSince): int
+    {
+        return (int)(new Query())
+            ->from(['u' => UrlRecord::tableName()])
+            ->where(['u.status' => UrlStatus::Broken->value])
+            ->andWhere(['>=', 'u.dateLastOk', Db::prepareDateForDb($workedSince)])
+            ->andWhere(['exists', $this->_referencedOnSite($siteId)])
+            ->count();
+    }
+
+    /**
+     * How many of a site's broken URLs the report first met after a given
+     * moment.
+     *
+     * For the Where to start pane, and it is the other kind of new to
+     * {@see self::recentlyBrokenCount()}: not a link that stopped working, but
+     * an address the scanner had never seen before, from content just added or
+     * a source just switched on. The two cannot overlap, since a URL first
+     * seen after the moment has no earlier working answer to its name.
+     *
+     * @param int $siteId The site being read.
+     * @param DateTimeInterface $since Count URLs first seen at or after this
+     *                                 moment.
+     * @return int The count.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function firstSeenBrokenCount(int $siteId, DateTimeInterface $since): int
+    {
+        return (int)(new Query())
+            ->from(['u' => UrlRecord::tableName()])
+            ->where(['u.status' => UrlStatus::Broken->value])
+            ->andWhere(['>=', 'u.dateFirstSeen', Db::prepareDateForDb($since)])
+            ->andWhere(['exists', $this->_referencedOnSite($siteId)])
+            ->count();
+    }
+
+    /**
+     * The broken URLs sitting in the most places on a site.
+     *
+     * For the Where to start pane, and it is the dedupe paying out: one address
+     * carried by three hundred entries is one fix, so the handful of URLs at
+     * the top of this list clear more of the report than any amount of working
+     * down it row by row. Ordered by how many places each appears in, counted
+     * in the same site scope everything else on the Overview is.
+     *
+     * The label is the URL itself, except for a stand-in `element:<id>` or
+     * `relation:<id>` row, where it is the target element's own title: the
+     * stand-in is a storage key, and a storage key on a pane telling an editor
+     * where to start is a row they cannot act on.
+     *
+     * @param int $siteId The site being read.
+     * @param int $limit How many URLs to return.
+     * @return array<int, array{url: string, urlHash: string, label: string, places: int}>
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function topBrokenByPlaces(int $siteId, int $limit = 5): array
+    {
+        $rows = (new Query())
+            ->select([
+                'url' => 'u.url',
+                'urlHash' => 'u.urlHash',
+                'places' => 'COUNT(r.id)',
+            ])
+            ->from(['u' => UrlRecord::tableName()])
+            ->innerJoin(['r' => ReferenceRecord::tableName()], '[[r.urlId]] = [[u.id]]')
+            ->where(['u.status' => UrlStatus::Broken->value, 'r.siteId' => $siteId])
+            ->groupBy(['u.id', 'u.url', 'u.urlHash'])
+            ->orderBy(['places' => SORT_DESC, 'u.id' => SORT_ASC])
+            ->limit($limit)
+            ->all();
+
+        return array_map(
+            fn(array $row): array => [
+                'url' => (string)$row['url'],
+                'urlHash' => (string)$row['urlHash'],
+                'label' => $this->urlLabel((string)$row['url'], $siteId),
+                'places' => (int)$row['places'],
+            ],
+            $rows,
+        );
+    }
+
+    /**
+     * A URL label cut down to the width of the links panel.
+     *
+     * The panel is a narrow column, and cutting a URL's tail off cuts off the
+     * part that tells two links apart: the scheme and the host eat the room
+     * and every internal link ends up reading the same. So a URL on one of
+     * this installation's own sites drops its origin and shows its path, and
+     * anything still too long is shortened in the middle, keeping the start
+     * and the end, which are the parts a person recognises. An element
+     * title passes through with the middle shortening alone.
+     *
+     * @param string $label The full label.
+     * @return string The label for a narrow column.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _panelLabel(string $label): string
+    {
+        $parts = parse_url($label);
+        $host = isset($parts['host']) ? strtolower((string)$parts['host']) : null;
+
+        if ($host !== null && in_array($host, $this->_siteHosts(), true)) {
+            $path = (string)($parts['path'] ?? '/');
+            $query = isset($parts['query']) ? '?' . (string)$parts['query'] : '';
+            $label = ($path === '' ? '/' : $path) . $query;
+        }
+
+        if (mb_strlen($label) <= 44) {
+            return $label;
+        }
+
+        return mb_substr($label, 0, 26) . '…' . mb_substr($label, -17);
+    }
+
+    /**
+     * The hosts this installation's sites answer on.
+     *
+     * @return string[] The hosts, lowercased.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _siteHosts(): array
+    {
+        if ($this->_siteHostsMemo !== null) {
+            return $this->_siteHostsMemo;
+        }
+
+        $hosts = [];
+
+        foreach (Craft::$app->getSites()->getAllSites() as $site) {
+            $host = parse_url((string)$site->getBaseUrl(), PHP_URL_HOST);
+
+            if (is_string($host) && $host !== '') {
+                $hosts[] = strtolower($host);
+            }
+        }
+
+        return $this->_siteHostsMemo = array_values(array_unique($hosts));
+    }
+
+    /**
+     * Where on an element each of a set of URLs sits, for scrolling to it.
+     *
+     * One location per URL, the first reference found: a URL sitting in three
+     * fields on the one page still only needs somewhere to start. A link at
+     * the top level names its field; a link inside a Matrix block names the
+     * block's id and the Matrix field holding it, so the edit screen can fall
+     * back to the field when the block cannot be found, a draft's copy of the
+     * page for instance.
+     *
+     * @param array<int, array<string, mixed>> $urlRows Rows carrying a `urlId`.
+     * @param int $elementId The element the panel is on.
+     * @param int $siteId The site it is being edited on.
+     * @return array<int, array{blockId: int|null, fieldHandle: string|null, rawHref: string|null, linkText: string|null}>
+     *         URL id to its location. The raw href and link text are what the
+     *         edit screen can find the anchor itself by, inside a field too
+     *         big for a field-level highlight to say much.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    private function _urlLocationsOnElement(array $urlRows, int $elementId, int $siteId): array
+    {
+        $urlIds = array_values(array_unique(array_map(
+            static fn(array $row): int => (int)$row['urlId'],
+            $urlRows,
+        )));
+
+        if ($urlIds === []) {
+            return [];
+        }
+
+        $rows = (new Query())
+            ->select([
+                'urlId' => 'r.urlId',
+                'elementId' => 'r.elementId',
+                'fieldHandle' => 'r.fieldHandle',
+                'rawHref' => 'r.rawHref',
+                'linkText' => 'r.linkText',
+            ])
+            ->from(['r' => ReferenceRecord::tableName()])
+            ->where($this->_heldByElement($elementId, $siteId))
+            ->andWhere(['r.urlId' => $urlIds])
+            ->orderBy(['r.id' => SORT_ASC])
+            ->all();
+
+        $elements = Craft::$app->getElements();
+        $locations = [];
+
+        foreach ($rows as $row) {
+            $urlId = (int)$row['urlId'];
+
+            if (isset($locations[$urlId])) {
+                continue;
+            }
+
+            $refElementId = (int)$row['elementId'];
+            $location = [
+                'blockId' => null,
+                'fieldHandle' => $row['fieldHandle'] !== null ? (string)$row['fieldHandle'] : null,
+                'rawHref' => $row['rawHref'] !== null ? (string)$row['rawHref'] : null,
+                'linkText' => $row['linkText'] !== null ? (string)$row['linkText'] : null,
+            ];
+
+            if ($refElementId !== $elementId) {
+                $nested = $elements->getElementById($refElementId, null, $siteId);
+                $location['blockId'] = $refElementId;
+                $location['fieldHandle'] = $nested instanceof Entry && $nested->fieldId !== null
+                    ? Craft::$app->getFields()->getFieldById((int)$nested->fieldId)?->handle
+                    : null;
+            }
+
+            $locations[$urlId] = $location;
+        }
+
+        return $locations;
+    }
+
+    /**
+     * The Edit link for a reference, aimed at the field where it can be aimed.
+     *
+     * A link in a top-level field gets a `#la-field-<handle>` fragment, and a
+     * link inside a Matrix block a `#la-block-<id>` one; the plugin's own
+     * script on the edit screen turns either into a scroll to the spot with a
+     * highlight on it. The fragments are the plugin's rather than bare
+     * `#fields-...` anchors because Craft's element editor rewrites the URL as
+     * it boots, and a native anchor neither survives that reliably nor
+     * highlights what it lands on.
+     *
+     * Best effort by design, both ways: a field on a tab that is not open has
+     * no matching id at the top of the page, a block inside a provisional
+     * draft can carry a different id than the one the scan recorded, and an
+     * unmatched fragment simply leaves the reader at the top, exactly where
+     * the link took them before.
+     *
+     * Public for the same reason {@see self::elementTypeLabel()} is: the CSV
+     * export writes the same Edit link the detail screen offers, and a second
+     * copy of the fragment logic would drift.
+     *
+     * @param ElementInterface $element The owner element being edited.
+     * @param array<string, mixed> $row The reference row.
+     * @param ElementInterface|null $fieldElement The element the link is stored
+     *                                            on, when the caller has it.
+     *                                            For a nested link it names the
+     *                                            Matrix field to fall back to
+     *                                            when the block itself cannot
+     *                                            be found on the page.
+     * @return string|null The edit URL, or null when the element has none.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function referenceEditUrl(ElementInterface $element, array $row, ?ElementInterface $fieldElement = null): ?string
+    {
+        $editUrl = $element->getCpEditUrl();
+
+        if ($editUrl === null) {
+            return null;
+        }
+
+        $fieldHandle = $row['fieldHandle'] !== null ? trim((string)$row['fieldHandle']) : '';
+        $nested = $row['ownerElementId'] !== null
+            && (int)$row['ownerElementId'] !== (int)$row['elementId'];
+
+        if ($nested) {
+            $matrixHandle = $fieldElement instanceof Entry && $fieldElement->fieldId !== null
+                ? Craft::$app->getFields()->getFieldById((int)$fieldElement->fieldId)?->handle
+                : null;
+
+            return $editUrl . '#la-block-' . (int)$row['elementId']
+                . ($matrixHandle !== null ? '--' . $matrixHandle : '');
+        }
+
+        if ($fieldHandle === '') {
+            return $editUrl;
+        }
+
+        // The plugin's own fragment rather than a bare #fields-... anchor, so
+        // the scroller on the edit screen handles it: a native anchor scrolls
+        // without the highlight, and only when it survives the URL rewrite the
+        // element editor makes as it boots.
+        return $editUrl . '#la-field-' . $fieldHandle;
+    }
+
+    /**
+     * What a stored URL is called when it is shown to a person.
+     *
+     * The URL itself, except for a stand-in `element:<id>` or `relation:<id>`
+     * row, which is answered with the target element's own title: the stand-in
+     * is a storage key for a link whose target has no URL, and a storage key
+     * names nothing an editor recognises. A target that cannot be loaded any
+     * more keeps the stand-in, since a blank would be worse.
+     *
+     * @param string $url The stored URL.
+     * @param int $siteId The site being read.
+     * @return string The label.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function urlLabel(string $url, int $siteId): string
+    {
+        $standInScheme = ExtractedLink::standInScheme($url);
+
+        if ($standInScheme === null) {
+            return $url;
+        }
+
+        $elementId = (int)substr($url, strlen($standInScheme) + 1);
+        $element = Craft::$app->getElements()->getElementById($elementId, null, $siteId);
+
+        return $element?->getUiLabel() ?? $url;
+    }
+
+    /**
      * The pages carrying the most broken links on a site.
      *
      * Grouped by the owning element rather than the element the link was found
@@ -663,7 +1050,7 @@ class ReportService extends Component
      * @param UrlStatus $status The verdict to count.
      * @param int $siteId The site being read.
      * @param array<string, mixed> $filters Any of `host`, `elementType`,
-     *                                      `source`, `permanent` and `search`.
+     *                                      `source`, `permanent`, `internal` and `search`.
      * @return int The count.
      * @author John Henry Donovan
      * @since 1.0.0
@@ -688,7 +1075,7 @@ class ReportService extends Component
      * @param UrlStatus $status The verdict to list.
      * @param int $siteId The site being read.
      * @param array<string, mixed> $filters Any of `host`, `elementType`,
-     *                                      `source`, `permanent` and `search`.
+     *                                      `source`, `permanent`, `internal` and `search`.
      * @param int $page The page number, from one.
      * @param int $perPage How many rows a page holds.
      * @param string $sort One of `url`, `host`, `httpStatus`, `lastChecked` or
@@ -920,6 +1307,12 @@ class ReportService extends Component
 
         if ($permanent !== '') {
             $query->andWhere(['u.redirectPermanent' => $permanent === '1']);
+        }
+
+        $internal = trim((string)($filters['internal'] ?? ''));
+
+        if ($internal !== '') {
+            $query->andWhere(['u.isInternal' => $internal === '1']);
         }
 
         $search = trim((string)($filters['search'] ?? ''));

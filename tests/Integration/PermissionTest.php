@@ -141,6 +141,15 @@ describe('Acting on one URL', function() {
             ->toThrow(ForbiddenHttpException::class);
     });
 
+    it('refuses a page recheck from somebody who may not run scans', function() {
+        $this->actingAs(permUserWith([BaseController::PERMISSION_VIEW_REPORTS]));
+
+        expect(fn() => $this->post('actions/link-audit/url-actions/recheck-element', [
+            'elementId' => 1,
+            'siteId' => (int)Craft::$app->getSites()->getPrimarySite()->id,
+        ]))->toThrow(ForbiddenHttpException::class);
+    });
+
     it('refuses an ignore from somebody who may not manage ignores', function() use ($hash) {
         $this->actingAs(permUserWith([
             BaseController::PERMISSION_VIEW_REPORTS,

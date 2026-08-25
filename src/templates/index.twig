@@ -296,6 +296,109 @@
             {% endfor %}
         </div>
 
+        {% if whereToStart %}
+            {% css %}
+            #link-audit-start ol { list-style: none; margin: var(--s) 0 0 0; padding: 0; counter-reset: la-step; }
+            #link-audit-start ol > li {
+                counter-increment: la-step;
+                display: flex;
+                gap: var(--m);
+                padding-block: var(--m);
+                border-block-start: 1px solid var(--border-hairline);
+            }
+            #link-audit-start ol > li::before {
+                content: counter(la-step);
+                flex: none;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 26px;
+                height: 26px;
+                border-radius: 50%;
+                background-color: var(--gray-100);
+                color: var(--text-color);
+                font-weight: 600;
+                font-variant-numeric: tabular-nums;
+            }
+            #link-audit-start .link-audit-start-body { flex: 1; min-width: 0; }
+            #link-audit-start .link-audit-start-body > a:first-child { font-weight: 600; }
+            #link-audit-start .link-audit-start-body > p { margin-block: 2px 0; }
+            #link-audit-start table { margin-block-start: var(--s); }
+            #link-audit-start table td { border-block-start: 1px solid var(--border-hairline); padding-block: var(--s); }
+            #link-audit-start table td:first-child { overflow-wrap: anywhere; }
+            #link-audit-start td.rightalign { font-variant-numeric: tabular-nums; white-space: nowrap; }
+            #link-audit-start > p:last-child {
+                margin-block: 0;
+                padding-block-start: var(--m);
+                border-block-start: 1px solid var(--border-hairline);
+            }
+            {% endcss %}
+            <div class="pane" id="link-audit-start">
+                <h2>{{ 'Where to start'|t('link-audit') }}</h2>
+                <p class="light">
+                    {{ 'A list this size is not worked front to back. Take it in this order and it shortens fastest.'|t('link-audit') }}
+                </p>
+                <ol>
+                    {% if whereToStart.internalBroken > 0 %}
+                        <li>
+                            <div class="link-audit-start-body">
+                                <a href="{{ cpUrl('link-audit/broken', { site: siteHandle, internal: '1' }) }}">
+                                    {{ '{count} broken links point at your own sites'|t('link-audit', { count: whereToStart.internalBroken }) }}</a>
+                                <p class="light">{{ 'Those are yours to fix without waiting on anybody else, and every one has been confirmed by your own server.'|t('link-audit') }}</p>
+                            </div>
+                        </li>
+                    {% endif %}
+                    {% if whereToStart.topByPlaces|length %}
+                        <li>
+                            <div class="link-audit-start-body">
+                                <a href="{{ cpUrl('link-audit/broken', { site: siteHandle }) }}">
+                                    {{ 'Clear {total} places with {count} fixes'|t('link-audit', {
+                                        count: whereToStart.topByPlaces|length,
+                                        total: whereToStart.topByPlacesTotal,
+                                    }) }}</a>
+                                <p class="light">{{ 'The addresses below sit in the most places, so these few fixes clear more of the report than anything else on it.'|t('link-audit') }}</p>
+                                <table class="data fullwidth">
+                                    <tbody>
+                                        {% for row in whereToStart.topByPlaces %}
+                                            <tr>
+                                                <td>
+                                                    <a href="{{ cpUrl('link-audit/url', { hash: row.urlHash, site: siteHandle }) }}" translate="no">
+                                                        {{ row.label|length > 70 ? row.label|slice(0, 69) ~ '…' : row.label }}
+                                                    </a>
+                                                </td>
+                                                <td class="rightalign">{{ '{count, plural, one{# place} other{# places}}'|t('link-audit', { count: row.places }) }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </li>
+                    {% endif %}
+                    {% if whereToStart.recentlyBroken > 0 %}
+                        <li>
+                            <div class="link-audit-start-body">
+                                <a href="{{ cpUrl('link-audit/broken', { site: siteHandle }) }}">
+                                    {{ '{count} of the broken links were still working a week ago'|t('link-audit', { count: whereToStart.recentlyBroken }) }}</a>
+                                <p class="light">{{ 'Fresh breakage is worth catching before it settles into the pile.'|t('link-audit') }}</p>
+                            </div>
+                        </li>
+                    {% endif %}
+                    {% if whereToStart.firstSeenBroken > 0 %}
+                        <li>
+                            <div class="link-audit-start-body">
+                                <a href="{{ cpUrl('link-audit/broken', { site: siteHandle }) }}">
+                                    {{ '{count} of the broken links were seen for the first time by the last scan'|t('link-audit', { count: whereToStart.firstSeenBroken }) }}</a>
+                                <p class="light">{{ 'Brand new to the report, from content just added or a source just switched on, so the author is likely still about.'|t('link-audit') }}</p>
+                            </div>
+                        </li>
+                    {% endif %}
+                </ol>
+                <p class="light">
+                    {{ 'And what not to start with: Unverifiable is never work, temporary redirects are not work either, and the permanent redirects keep for a quiet week. Broken is the list.'|t('link-audit') }}
+                </p>
+            </div>
+        {% endif %}
+
         {% if latestScan %}
             {% set lastScanStopped = latestScan.status == 'cancelled' %}
             <div class="pane" id="link-audit-last-scan">

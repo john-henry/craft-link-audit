@@ -18,7 +18,7 @@
 
 {% block content %}
     <p class="light">
-        {{ 'These all still work, so nobody is landing on an error. A permanent one is worth tidying up anyway: the page it points at has moved for good and your content is still carrying the old address. Copy what is in the Goes To column into the link and it stops being a detour.'|t('link-audit') }}
+        {{ 'These all still work, so nobody is landing on an error. URL is the address as it is written in your content, and Goes To is where the server actually sends anybody who follows it. A permanent one is worth tidying up anyway: the page it points at has moved for good and your content is still carrying the old address. Copy what is in the Goes To column into the link and it stops being a detour.'|t('link-audit') }}
     </p>
 
     {% include 'link-audit/_includes/url-table' with {

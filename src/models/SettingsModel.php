@@ -6,6 +6,7 @@
 
 namespace johnhenry\linkaudit\models;
 
+use Craft;
 use craft\base\Model;
 use craft\helpers\App;
 use johnhenry\linkaudit\helpers\ScannableElementTypes;
@@ -119,6 +120,29 @@ class SettingsModel extends Model
      * scanning, as editable table rows.
      */
     public array $excludedUriPatterns = [];
+
+    /**
+     * @var string[] Section UIDs excluded from the audit altogether.
+     *
+     * Stored by UID rather than id, because settings travel through project
+     * config and a section's UID is the one name it keeps across environments.
+     * An excluded section is fenced both ways: its entries' fields are never
+     * read, and an element link or relation pointing at one of its entries is
+     * recorded as ignored rather than judged. That second half is what the
+     * Excluded URI Patterns setting cannot do for a section whose entries have
+     * no URLs at all.
+     */
+    public array $excludedSectionUids = [];
+
+    /**
+     * @var string[] Category group UIDs excluded from the audit altogether.
+     *
+     * The same fence as [[excludedSectionUids]], for the taxonomy case: a
+     * category group without a URI format is the norm rather than the
+     * exception, and a link or relation pointing at one of its categories
+     * should not be judged broken for having no page.
+     */
+    public array $excludedCategoryGroupUids = [];
 
     /**
      * @var bool Whether internal links are resolved against the site's own
@@ -402,6 +426,7 @@ class SettingsModel extends Model
                 'string',
             ],
             [['scannedElementTypes'], 'each', 'rule' => ['string'], 'skipOnEmpty' => true],
+            [['excludedCategoryGroupUids', 'excludedSectionUids'], 'each', 'rule' => ['string'], 'skipOnEmpty' => true],
             [
                 [
                     'botHostileHosts',
@@ -436,6 +461,8 @@ class SettingsModel extends Model
             'checkInternalLinks' => 'Check Internal Links',
             'concurrency' => 'Concurrent Requests',
             'connectTimeout' => 'Connect Timeout (seconds)',
+            'excludedCategoryGroupUids' => 'Excluded Category Groups',
+            'excludedSectionUids' => 'Excluded Sections',
             'excludedUriPatterns' => 'Excluded URI Patterns',
             'ignoreHosts' => 'Ignored Hosts',
             'ignorePatterns' => 'Ignored URL Patterns',
@@ -508,6 +535,63 @@ class SettingsModel extends Model
 
         return self::USER_AGENT_TOKEN . '/' . $this->_pluginVersion()
             . ' (+' . self::_USER_AGENT_INFO_URL . ')';
+    }
+
+    /**
+     * The ids of the excluded sections on this install.
+     *
+     * The setting stores UIDs, because those survive the trip through project
+     * config; everything that fences by section compares ids, because that is
+     * what an entry carries. A UID naming a section that no longer exists is
+     * simply dropped, the same way [[resolvedScannedElementTypes()]] drops a
+     * dead class.
+     *
+     * @return int[] The section ids.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function excludedSectionIds(): array
+    {
+        if ($this->excludedSectionUids === []) {
+            return [];
+        }
+
+        $ids = [];
+
+        foreach (Craft::$app->getEntries()->getAllSections() as $section) {
+            if (in_array($section->uid, $this->excludedSectionUids, true)) {
+                $ids[] = (int)$section->id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * The ids of the excluded category groups on this install.
+     *
+     * The category-group half of [[excludedSectionIds()]], with the same
+     * shape and the same reasons.
+     *
+     * @return int[] The group ids.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function excludedCategoryGroupIds(): array
+    {
+        if ($this->excludedCategoryGroupUids === []) {
+            return [];
+        }
+
+        $ids = [];
+
+        foreach (Craft::$app->getCategories()->getAllGroups() as $group) {
+            if (in_array($group->uid, $this->excludedCategoryGroupUids, true)) {
+                $ids[] = (int)$group->id;
+            }
+        }
+
+        return $ids;
     }
 
     /**
