@@ -1,5 +1,36 @@
 # Release Notes for Link Audit
 
+## 1.0.0-beta.7 - 2026-08-26
+
+### Security
+- Closed a stored cross-site-scripting hole on the report list screens. An address carrying a double quote, which a browser accepts and an author can paste into a link, was placed into a control-panel attribute through an escaper that does not escape quotes, so a crafted href could run script for anyone opening the list. Attribute values are now escaped in full.
+
+### Added
+- Edit links on the URL detail page now land on the very anchor carrying the link, the same precision the entry sidebar panel has: the right tab is opened, the exact link is scrolled to the centre of the screen and flashed, inside a Matrix block or a long rich text field alike. The CSV keeps the plainer field and block fragments, which work for a reader who is not signed in.
+- Two new console commands for catching the report up without waiting on recheck windows: `php craft link-audit/scan/recheck-url --url=...` checks one address there and then and prints the verdict, and `php craft link-audit/scan/recheck-broken --all` brings everything but the ignored forward, working links included, the sweep for after a migration or a hosting move.
+
+### Removed
+- The guided tour is gone, and the vendored Driver.js library with it. The Where to start pane on the Overview does the same orientation job in context and stays put rather than running once, so the tour had become a maintenance cost with nothing left to teach that the screen does not.
+
+### Changed
+- A CSV export leaves off the two redirect columns, Redirect Code and Goes To, on any list but Redirects, where they are always empty, so a broken or unverifiable export no longer carries two blank columns to puzzle over. The download is also named after the verdict as the screen labels it: the Unverifiable list exports as `link-audit-unverifiable-<date>.csv` rather than the `blocked` the database calls it.
+- The longer settings explanations moved off the screen and into info tips: each field now leads with one plain sentence, and the rest sits behind the familiar circled i, the way Craft's own settings do it, with nothing cut, only tucked away. The pattern and host columns in the rules tables carry a tip of their own with worked examples, so the regular expression help is beside the box you type it into.
+- The Settings link leaves the sidebar on environments where admin changes are turned off, the same rule Craft applies to its own Settings section. The screens stay reachable by URL there, rendered read-only.
+- The list screens behave themselves on a phone: the filter dropdowns sit two to a row with Apply and Download CSV full width beneath them, the Host and Last Checked columns step aside so the address and the buttons keep their room, and the Where it appears table on a URL's page scrolls sideways rather than crushing its columns. On a full screen, Apply now looks like the button it is and Download CSV sits at the end of the bar on its own.
+- The host filter on the list screens now says how many URLs each host is carrying, `example.com (3)`, so a reader can see where the trouble concentrates before choosing.
+- The settings tabs no longer open with a boxed note explaining themselves. The guidance lives in each field's own instructions and in the documentation, and a screen that greets you with a warning-styled paragraph reads like something is wrong when nothing is. The Schedule tab keeps its note, since that one carries the cron lines to copy, and it is now styled as the blue tip it is rather than a red warning.
+
+### Fixed
+- The broken-links notification email now names an element link by its target's title instead of the internal marker, and gives each link its own line through to its report page, where the pages carrying it are listed with the edit links that open on the right field.
+- The "Check this page again" button, and a rescan, no longer send a notification email or Slack post for links that were already broken. A recheck that finds a standing failure still standing is no longer counted as a fresh break, and a single-page recheck no longer mails the content team at all.
+- A very long link address no longer breaks a scan. An href over the stored length is trimmed to fit rather than failing the whole batch and failing it again on every rescan.
+- The page recheck endpoint now checks that the element exists and that the reader may see it before doing any work, and the report list screens cap how large a page of rows a request may ask for.
+- The Ignored screen names an element link by its target's title, the way every other screen does, instead of the internal marker.
+- Hovering a URL on the list screens now says plainly that the click opens the link's report rather than the link itself. The external-link icon beside it remains the way to actually visit one.
+- The sidebar badges no longer vanish on screens with no site context, the Dashboard among them: they fall back to the primary site, which is the site the links themselves open.
+- The badge beside Ignored in the sidebar now counts the dismissals the screen actually lists. It used to count every URL holding the ignored verdict, rule-quieted addresses and skipped schemes included, so it could promise dozens of rows over an empty screen.
+- Clearing a number field on the settings and saving no longer quietly stores a zero. For the fields where zero is legal, the caching windows among them, an emptied box used to become "trust nothing, recheck everything on every scan" without anybody choosing it. An empty box now keeps the stored value, and a typed 0 still lands.
+
 ## 1.0.0-beta.6 - 2026-08-25
 
 ### Added
@@ -15,6 +46,7 @@
 - A link found inside a Matrix block now says which kind of block it is in: the Where it appears table reads "(in a Stats and Image block)" rather than "(in a block)", using the name on the block's own header, so the author knows which block on the page to open.
 - The CSV columns now lead with the place and follow with the link: Page, Edit URL, Page URL, Page Type, Site, Field, Link Text, then the URL and its verdict, codes and dates. A row in this file is a place a link appears, so the file now reads as the work list it is. Anything parsing the old column order will need updating.
 - The Redirects screen's opening line now says plainly what the two address columns mean: URL is the address as written in your content, Goes To is where the server actually sends anybody who follows it.
+- On an environment where admin changes are turned off, the settings screens now show Craft's own read-only notice, the same one every native settings screen and well-behaved plugin shows, instead of a warning box of the plugin's own. The plugin now requires Craft 5.6 or later, which is where that notice arrived.
 
 ## 1.0.0-beta.5 - 2026-08-24
 

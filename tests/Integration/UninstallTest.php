@@ -13,7 +13,6 @@ use craft\queue\jobs\UpdateSearchIndex;
 use craft\widgets\RecentEntries;
 use johnhenry\linkaudit\jobs\ExtractElementLinks;
 use johnhenry\linkaudit\LinkAudit;
-use johnhenry\linkaudit\services\TourService;
 use johnhenry\linkaudit\services\UninstallService;
 use johnhenry\linkaudit\widgets\BrokenLinksWidget;
 use markhuot\craftpest\factories\User as UserFactory;
@@ -44,24 +43,6 @@ use markhuot\craftpest\factories\User as UserFactory;
 function uninstallService(): UninstallService
 {
     return LinkAudit::getInstance()->getUninstallService();
-}
-
-/** The preferences held against a user, read past the service's memo. */
-function uninstallStoredPreferences(int $userId): array
-{
-    $stored = (new Query())
-        ->select(['preferences'])
-        ->from(Table::USERPREFERENCES)
-        ->where(['userId' => $userId])
-        ->scalar();
-
-    if (!is_string($stored)) {
-        return [];
-    }
-
-    $decoded = json_decode($stored, true);
-
-    return is_array($decoded) ? $decoded : [];
 }
 
 /** Puts a dashboard tile of the given type on a user's dashboard. */
@@ -119,34 +100,6 @@ describe('UninstallService::releaseQueuedJobs', function() {
     });
 });
 
-describe('UninstallService::forgetUserPreferences', function() {
-    it('takes the plugin\'s keys off a user and leaves the rest', function() {
-        $user = UserFactory::factory()->create();
-
-        Craft::$app->getUsers()->saveUserPreferences($user, ['locale' => 'en-GB']);
-        LinkAudit::getInstance()->getTourService()->markSeen($user);
-
-        expect(uninstallStoredPreferences((int)$user->id))
-            ->toHaveKey(TourService::PREFERENCE_OVERVIEW_SEEN);
-
-        expect(uninstallService()->forgetUserPreferences())->toBeGreaterThanOrEqual(1);
-
-        expect(uninstallStoredPreferences((int)$user->id))
-            ->not->toHaveKey(TourService::PREFERENCE_OVERVIEW_SEEN)
-            ->and(uninstallStoredPreferences((int)$user->id)['locale'])->toBe('en-GB');
-    });
-
-    it('leaves a user who never met the tour untouched', function() {
-        $user = UserFactory::factory()->create();
-
-        Craft::$app->getUsers()->saveUserPreferences($user, ['locale' => 'en-IE']);
-
-        uninstallService()->forgetUserPreferences();
-
-        expect(uninstallStoredPreferences((int)$user->id))->toBe(['locale' => 'en-IE']);
-    });
-});
-
 describe('UninstallService::forgetDashboardWidgets', function() {
     it('removes the plugin\'s tiles and leaves Craft\'s own', function() {
         $user = UserFactory::factory()->create();
@@ -183,7 +136,6 @@ describe('The uninstall hook', function() {
     it('runs the cleanup when Craft calls it', function() {
         $user = UserFactory::factory()->create();
 
-        LinkAudit::getInstance()->getTourService()->markSeen($user);
         $widgetId = uninstallWidget((int)$user->id, BrokenLinksWidget::class);
         $jobId = (string)QueueHelper::push(new ExtractElementLinks(['elementId' => 1]));
 
@@ -191,8 +143,6 @@ describe('The uninstall hook', function() {
         $hook->invoke(LinkAudit::getInstance());
 
         expect(uninstallQueueRowExists($jobId))->toBeFalse()
-            ->and((new Query())->from(Table::WIDGETS)->where(['id' => $widgetId])->exists())->toBeFalse()
-            ->and(uninstallStoredPreferences((int)$user->id))
-            ->not->toHaveKey(TourService::PREFERENCE_OVERVIEW_SEEN);
+            ->and((new Query())->from(Table::WIDGETS)->where(['id' => $widgetId])->exists())->toBeFalse();
     });
 });

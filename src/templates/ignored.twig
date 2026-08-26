@@ -46,7 +46,7 @@
                         <tr>
                             <td style="word-break:break-all">
                                 {% if row.detailUrl %}
-                                    <a href="{{ row.detailUrl }}">{{ row.url }}</a>
+                                    <a href="{{ row.detailUrl }}" title="{{ row.url }}">{{ row.label ?? row.url }}</a>
                                 {% else %}
                                     {{ row.value ?? row.urlHash }}
                                     <span class="light">{{ '(nothing points at it any more)'|t('link-audit') }}</span>

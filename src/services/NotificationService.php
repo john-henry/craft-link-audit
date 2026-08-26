@@ -263,6 +263,11 @@ class NotificationService extends Component
             '',
         ];
 
+        $report = LinkAudit::$plugin->getReportService();
+        $siteId = $scan['siteId'] !== null
+            ? (int)$scan['siteId']
+            : (int)Craft::$app->getSites()->getPrimarySite()->id;
+
         foreach ($urls as $url) {
             // The stored reason is a developer's code word, so it is put through
             // the same label the screens use rather than dropped into somebody's
@@ -271,9 +276,18 @@ class NotificationService extends Component
                 ? (string)$url['httpStatus']
                 : (string)(Verdict::reasonLabel($url['reason'] !== null ? (string)$url['reason'] : null) ?? '');
 
+            // The label the screens use, so a stand-in for an element link is
+            // named by its target's title rather than the internal marker.
+            $label = $report->urlLabel((string)$url['url'], $siteId);
+            $detailUrl = UrlHelper::cpUrl('link-audit/url', ['hash' => (string)$url['urlHash']]);
+
             $lines[] = $note !== ''
-                ? sprintf('- %s (%s)', (string)$url['url'], $note)
-                : '- ' . (string)$url['url'];
+                ? sprintf('- %s (%s)', $label, $note)
+                : '- ' . $label;
+            // The link goes to the URL's own page, where the pages carrying it
+            // are named, each with an Edit link that opens the entry on the
+            // very field the link sits in.
+            $lines[] = '  ' . $detailUrl;
         }
 
         if ($total > count($urls)) {
@@ -315,7 +329,7 @@ class NotificationService extends Component
         }
 
         $query = (new Query())
-            ->select(['id', 'url', 'host', 'httpStatus', 'reason', 'dateLastBroken'])
+            ->select(['id', 'url', 'urlHash', 'host', 'httpStatus', 'reason', 'dateLastBroken'])
             ->from([UrlRecord::tableName()])
             ->where(['status' => UrlStatus::Broken->value])
             ->andWhere(['id' => $references])

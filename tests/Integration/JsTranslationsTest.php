@@ -108,12 +108,12 @@ describe('The screens', function() {
     });
 
     it('hand the overview its strings too', function() {
-        $restore = jsTTranslate('Done', 'Déanta');
+        $restore = jsTTranslate('Host', 'Óstach');
 
         try {
             $this->get('admin/link-audit')
                 ->assertOk()
-                ->assertSee('Craft.translations["link-audit"]["Done"] = "D', false);
+                ->assertSee('Craft.translations["link-audit"]["Host"] = "', false);
         } finally {
             $restore();
         }

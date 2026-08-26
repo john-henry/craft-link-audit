@@ -109,7 +109,13 @@ class ExportService extends Component
      */
     public function csv(UrlStatus $status, array $siteIds, array $filters = []): Generator
     {
-        yield self::_BOM . $this->_chunk([$this->_header()]);
+        // The redirect columns say nothing on any other list, so a broken or
+        // unverifiable export drops them rather than trailing two empty columns
+        // a reader has to wonder about. The choice is made once, off the
+        // verdict being exported, so every row keeps the same shape.
+        $withRedirect = $status === UrlStatus::Redirect;
+
+        yield self::_BOM . $this->_chunk([$this->_header($withRedirect)]);
 
         if ($siteIds === []) {
             return;
@@ -122,7 +128,7 @@ class ExportService extends Component
             $elements = $this->_elements($batch);
 
             yield $this->_chunk(array_map(
-                fn(array $row): array => $this->_row($row, $elements, $places, $sourceLabels),
+                fn(array $row): array => $this->_row($row, $elements, $places, $sourceLabels, $withRedirect),
                 $batch,
             ));
         }
@@ -133,7 +139,9 @@ class ExportService extends Component
      *
      * The verdict and the date, because the two questions somebody asks of a
      * file sitting in their downloads folder a fortnight later are which list it
-     * came off and how old it is.
+     * came off and how old it is. The verdict is the name off the screen, so an
+     * export of the Unverifiable list reads `unverifiable`, not the `blocked`
+     * the database calls it.
      *
      * @param UrlStatus $status The verdict being exported.
      * @return string The file name.
@@ -142,7 +150,9 @@ class ExportService extends Component
      */
     public function filename(UrlStatus $status): string
     {
-        return sprintf('link-audit-%s-%s.csv', $status->value, DateTimeHelper::now()->format('Y-m-d'));
+        $slug = strtolower((string)preg_replace('/[^a-z0-9]+/i', '-', $status->label()));
+
+        return sprintf('link-audit-%s-%s.csv', trim($slug, '-'), DateTimeHelper::now()->format('Y-m-d'));
     }
 
     /**
@@ -471,13 +481,14 @@ class ExportService extends Component
      * get them to it, and where on it to look come first, and the address being
      * reported on comes after with its verdict beside it.
      *
+     * @param bool $withRedirect Whether the redirect columns are included.
      * @return array<int, string> The heading row.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function _header(): array
+    private function _header(bool $withRedirect): array
     {
-        return [
+        return array_values(array_filter([
             Craft::t('link-audit', 'Page'),
             Craft::t('link-audit', 'Edit URL'),
             Craft::t('link-audit', 'Page URL'),
@@ -489,14 +500,14 @@ class ExportService extends Component
             Craft::t('link-audit', 'Verdict'),
             Craft::t('link-audit', 'Reason'),
             Craft::t('link-audit', 'Response Code'),
-            Craft::t('link-audit', 'Redirect Code'),
-            Craft::t('link-audit', 'Goes To'),
+            $withRedirect ? Craft::t('link-audit', 'Redirect Code') : null,
+            $withRedirect ? Craft::t('link-audit', 'Goes To') : null,
             Craft::t('link-audit', 'Host'),
             Craft::t('link-audit', 'Found Via'),
             Craft::t('link-audit', 'Places Total'),
             Craft::t('link-audit', 'First Seen'),
             Craft::t('link-audit', 'Last Checked'),
-        ];
+        ], static fn(?string $heading): bool => $heading !== null));
     }
 
     /**
@@ -676,11 +687,13 @@ class ExportService extends Component
      * @param array<string, ElementInterface> $elements The batch's elements.
      * @param array<int, int> $places The batch's place counts.
      * @param array<string, string> $sourceLabels What each source is called.
+     * @param bool $withRedirect Whether the redirect columns are included, in
+     *                           step with {@see self::_header()}.
      * @return array<int, string> The cells.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    private function _row(array $row, array $elements, array $places, array $sourceLabels): array
+    private function _row(array $row, array $elements, array $places, array $sourceLabels, bool $withRedirect): array
     {
         $report = LinkAudit::$plugin->getReportService();
         $status = UrlStatus::tryFrom((string)$row['status']) ?? UrlStatus::Pending;
@@ -693,7 +706,7 @@ class ExportService extends Component
         $site = Craft::$app->getSites()->getSiteById((int)$row['siteId']);
         $source = (string)$row['source'];
 
-        return array_map($this->_cell(...), [
+        $cells = [
             // An element that will not load leaves its columns blank rather
             // than guessed at. It means the page has gone since the last scan,
             // and its id would be no use to anybody opening this file to fix
@@ -709,13 +722,19 @@ class ExportService extends Component
             $status->label(),
             Verdict::reasonLabel($row['reason'] !== null ? (string)$row['reason'] : null),
             $row['httpStatus'],
-            $row['redirectStatus'],
-            $row['finalUrl'],
-            $row['host'],
-            $sourceLabels[$source] ?? $source,
-            $places[(int)$row['urlId']] ?? 1,
-            $this->_date($row['dateFirstSeen']),
-            $this->_date($row['dateLastChecked']),
-        ]);
+        ];
+
+        if ($withRedirect) {
+            $cells[] = $row['redirectStatus'];
+            $cells[] = $row['finalUrl'];
+        }
+
+        $cells[] = $row['host'];
+        $cells[] = $sourceLabels[$source] ?? $source;
+        $cells[] = $places[(int)$row['urlId']] ?? 1;
+        $cells[] = $this->_date($row['dateFirstSeen']);
+        $cells[] = $this->_date($row['dateLastChecked']);
+
+        return array_map($this->_cell(...), $cells);
     }
 }

@@ -16,6 +16,7 @@ use johnhenry\linkaudit\enums\ScanMode;
 use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\exceptions\ScanInProgressException;
 use johnhenry\linkaudit\helpers\QueueJobs;
+use johnhenry\linkaudit\helpers\UrlNormaliser;
 use johnhenry\linkaudit\LinkAudit;
 use johnhenry\linkaudit\records\ReferenceRecord;
 use johnhenry\linkaudit\records\ScanRecord;
@@ -33,7 +34,8 @@ use yii\console\ExitCode;
  *   php craft link-audit/scan/incremental
  *   php craft link-audit/scan/element --element-id=42
  *   php craft link-audit/scan/check-pending
- *   php craft link-audit/scan/recheck-broken
+ *   php craft link-audit/scan/recheck-broken [--all]
+ *   php craft link-audit/scan/recheck-url --url=https://example.com/page
  *   php craft link-audit/scan/cancel
  *   php craft link-audit/scan/prune --days=90
  *   php craft link-audit/scan/reset --force
@@ -58,6 +60,12 @@ class ScanController extends Controller
     public $defaultAction = 'report';
 
     /**
+     * @var bool Bring every URL forward on a recheck, working links included,
+     * rather than only the broken and unanswered ones.
+     */
+    public bool $all = false;
+
+    /**
      * @var int Days of scan history to keep when pruning. Defaults to the
      * configured retention.
      */
@@ -79,6 +87,11 @@ class ScanController extends Controller
      * not given.
      */
     public ?string $site = null;
+
+    /**
+     * @var string|null The URL to check again, for a single URL recheck.
+     */
+    public ?string $url = null;
 
     // =========================================================================
     // Public Methods
@@ -250,6 +263,11 @@ class ScanController extends Controller
      * Brings every broken URL forward so the next check phase asks it again,
      * then queues that check.
      *
+     * With `--all`, everything but the ignored comes forward, working links
+     * included: the sweep for after a migration or a hosting move, when every
+     * verdict deserves a fresh answer without throwing the history away the
+     * way a reset would.
+     *
      * @return int The exit code.
      * @author John Henry Donovan
      * @since 1.0.0
@@ -259,11 +277,15 @@ class ScanController extends Controller
         // Dragging the next check date into the past is what puts these back in
         // front of the check phase: the status alone would not, since a broken
         // URL is only offered again once its recheck window has run out.
+        $condition = $this->all
+            ? ['not', ['status' => UrlStatus::Ignored->value]]
+            : ['status' => [UrlStatus::Broken->value, UrlStatus::Unreachable->value]];
+
         $reset = Craft::$app->getDb()->createCommand()
             ->update(
                 UrlRecord::tableName(),
                 ['nextCheckAfter' => Db::prepareDateForDb(DateTimeHelper::now()->modify('-1 minute'))],
-                ['status' => [UrlStatus::Broken->value, UrlStatus::Unreachable->value]],
+                $condition,
             )
             ->execute();
 
@@ -276,9 +298,73 @@ class ScanController extends Controller
         $scan = LinkAudit::$plugin->getScanService()->startScan(ScanMode::CheckOnly);
 
         $this->stdout(
-            "Queued scan $scan->id: $reset broken or unreachable URLs will be asked again.\n",
+            $this->all
+                ? "Queued scan $scan->id: $reset URLs will be asked again, everything but the ignored.\n"
+                : "Queued scan $scan->id: $reset broken or unreachable URLs will be asked again.\n",
             Console::FG_GREEN,
         );
+
+        return ExitCode::OK;
+    }
+
+    /**
+     * Checks one URL again, there and then, and prints what came back.
+     *
+     * Inline rather than queued, the same as the Check again button in the
+     * control panel: it is one URL and somebody is sitting at a terminal
+     * waiting on the answer.
+     *
+     * @return int The exit code.
+     * @throws Throwable If the check cannot be run.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function actionRecheckUrl(): int
+    {
+        if ($this->url === null || trim($this->url) === '') {
+            $this->stderr("Pass --url.\n", Console::FG_RED);
+
+            return ExitCode::USAGE;
+        }
+
+        $settings = LinkAudit::$plugin->getSettings();
+        $normalised = UrlNormaliser::normalise(trim($this->url), null, $settings->stripTrackingParams);
+
+        if ($normalised === null) {
+            $this->stderr("That is not a checkable URL. Give the full address, scheme and all.\n", Console::FG_RED);
+
+            return ExitCode::USAGE;
+        }
+
+        $report = LinkAudit::$plugin->getReportService();
+        $hash = UrlNormaliser::hash($normalised);
+        $row = $report->urlByHash($hash);
+
+        if ($row === null) {
+            $this->stderr("No URL has been seen with that address. It has to be found by a scan before it can be rechecked.\n", Console::FG_RED);
+
+            return ExitCode::USAGE;
+        }
+
+        if ((string)$row['status'] === UrlStatus::Ignored->value) {
+            $this->stdout("That URL is ignored, so it is not checked. Restore it first.\n", Console::FG_YELLOW);
+
+            return ExitCode::OK;
+        }
+
+        $checked = LinkAudit::$plugin->getScanService()->checkChunk([$row]);
+
+        if ($checked === 0) {
+            $this->stdout("The host asked to be left alone for a while, so nothing was checked. Try again shortly.\n", Console::FG_YELLOW);
+
+            return ExitCode::OK;
+        }
+
+        $fresh = $report->urlByHash($hash) ?? $row;
+        $status = UrlStatus::tryFrom((string)$fresh['status']) ?? UrlStatus::Pending;
+        $code = $fresh['httpStatus'] !== null ? ' (' . (int)$fresh['httpStatus'] . ')' : '';
+
+        $this->stdout('Checked: ' . $status->label() . "$code.\n", Console::FG_GREEN);
 
         return ExitCode::OK;
     }
@@ -359,6 +445,8 @@ class ScanController extends Controller
             'all', 'incremental', 'report' => ['site'],
             'element' => ['elementId', 'site'],
             'prune' => ['days'],
+            'recheck-broken' => ['all'],
+            'recheck-url' => ['url'],
             'reset' => ['force'],
             default => [],
         });

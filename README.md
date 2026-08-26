@@ -64,13 +64,9 @@ Need a hand? Open an issue on our [GitHub Issues page](https://github.com/john-h
 
 This package is licensed for free under the MIT License.
 
-The control panel tour is built on [Driver.js](https://driverjs.com) 1.8.0, which is vendored with
-the plugin and is itself MIT licensed. The details are in `src/assets/tour/dist/LICENSE.md`.
-
 ## Requirements
 
-Craft CMS 5.0.0 or later, and PHP 8.2 or later. The queue worker makes the outbound requests, so
-that is the machine that needs to reach the internet.
+Craft CMS 5.6.0 or later, and PHP 8.2 or later. 
 
 ---
 

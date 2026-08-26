@@ -419,7 +419,14 @@ class SettingsController extends BaseController
             return $current;
         }
 
-        return array_values(array_filter(array_map('strval', $posted)));
+        // Only the scalar members are kept. A crafted post can nest an array in
+        // here, and a nested array through strval is a warning that devMode
+        // turns into an exception, with the literal string "Array" stored in
+        // project config behind it.
+        return array_values(array_filter(array_map(
+            'strval',
+            array_filter($posted, 'is_scalar'),
+        )));
     }
 
     /**
@@ -449,7 +456,12 @@ class SettingsController extends BaseController
             return [];
         }
 
-        return array_values(array_filter(array_map('strval', $posted)));
+        // Scalars only, so a nested array cannot become the string "Array" in
+        // project config; see {@see self::_elementTypes()}.
+        return array_values(array_filter(array_map(
+            'strval',
+            array_filter($posted, 'is_scalar'),
+        )));
     }
 
     /**
@@ -482,15 +494,27 @@ class SettingsController extends BaseController
     /**
      * A posted whole number.
      *
+     * A box cleared out keeps the stored value rather than becoming a zero
+     * nobody typed: for the settings where zero is legal, "trust nothing" and
+     * "keep everything" among them, an accidental backspace-and-save should
+     * not change policy. A deliberate 0 posts as the character and lands.
+     *
      * @param string $name The setting name.
-     * @param int $current What it holds now, used when the field was not posted.
+     * @param int $current What it holds now, used when the field was not
+     *                     posted, or was posted empty.
      * @return int The value.
      * @author John Henry Donovan
      * @since 1.0.0
      */
     private function _int(string $name, int $current): int
     {
-        return (int)$this->request->getBodyParam("settings[$name]", $current);
+        $posted = $this->request->getBodyParam("settings[$name]");
+
+        if ($posted === null || trim((string)$posted) === '') {
+            return $current;
+        }
+
+        return (int)$posted;
     }
 
     /**

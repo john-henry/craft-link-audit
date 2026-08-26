@@ -25,7 +25,6 @@ use yii\base\InvalidConfigException;
  * @property-read ReportService $reportService
  * @property-read RequestScheduler $requestScheduler
  * @property-read ScanService $scanService
- * @property-read TourService $tourService
  * @property-read UninstallService $uninstallService
  * @property-read UrlStore $urlStore
  * @author John Henry Donovan
@@ -59,7 +58,6 @@ trait ServicesTrait
                 'reportService' => ReportService::class,
                 'requestScheduler' => RequestScheduler::class,
                 'scanService' => ScanService::class,
-                'tourService' => TourService::class,
                 'uninstallService' => UninstallService::class,
                 'urlStore' => UrlStore::class,
             ],
@@ -242,22 +240,6 @@ trait ServicesTrait
     {
         $component = $this->get('scanService');
         assert($component instanceof ScanService);
-
-        return $component;
-    }
-
-    /**
-     * Returns the guided tour service.
-     *
-     * @return TourService The tour service instance.
-     * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    public function getTourService(): TourService
-    {
-        $component = $this->get('tourService');
-        assert($component instanceof TourService);
 
         return $component;
     }

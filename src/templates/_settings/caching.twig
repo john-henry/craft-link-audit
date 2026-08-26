@@ -3,14 +3,6 @@
 {% import '_includes/forms.twig' as forms %}
 
 {% block settingsFields %}
-    <div class="readable">
-        <blockquote class="note">
-            <p>
-                {{ 'A verdict is kept and trusted for a while rather than asked again on every scan. That one idea is what makes a rescan cheap: the second run only pays for what has gone stale. Working links are trusted for weeks, broken ones are asked again the next day so a fix shows up quickly, and the ones nothing can be learned from are left the longest.'|t('link-audit') }}
-            </p>
-        </blockquote>
-    </div>
-
     {{ forms.textField({
         label: 'Trust Working Links For (days)'|t('link-audit'),
         instructions: 'How long a link that answered is left alone before it is checked again.'|t('link-audit'),
@@ -39,7 +31,8 @@
 
     {{ forms.textField({
         label: 'Recheck Broken Links After (hours)'|t('link-audit'),
-        instructions: 'Short on purpose. Somebody fixing a link today wants it off the list tomorrow, not next month.'|t('link-audit'),
+        instructions: 'How long a broken link is left before it is asked again.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Kept short so that somebody fixing a link today sees it off the list tomorrow, not next month.'|t('link-audit') ~ '</span>',
         id: 'brokenRecheckHours',
         name: 'settings[brokenRecheckHours]',
         value: settings.brokenRecheckHours,
@@ -52,7 +45,8 @@
 
     {{ forms.textField({
         label: 'Recheck Unreachable Links After (hours)'|t('link-audit'),
-        instructions: 'For links that did not answer at all. Shorter again, since these are the ones most likely to be grand by the afternoon.'|t('link-audit'),
+        instructions: 'The same, for a link that did not answer at all.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Shorter again, since these are the ones most likely to be grand by the afternoon.'|t('link-audit') ~ '</span>',
         id: 'unreachableRecheckHours',
         name: 'settings[unreachableRecheckHours]',
         value: settings.unreachableRecheckHours,
@@ -65,7 +59,8 @@
 
     {{ forms.textField({
         label: 'Recheck Unverifiable Links After (days)'|t('link-audit'),
-        instructions: 'For hosts that block automated requests as a matter of policy. Long on purpose: asking them again sooner will not change the answer, and it only annoys them.'|t('link-audit'),
+        instructions: 'The same, for hosts that block automated requests as a matter of policy.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'A long wait does no harm here: asking sooner will not change the answer, and it only annoys them.'|t('link-audit') ~ '</span>',
         id: 'blockedTtlDays',
         name: 'settings[blockedTtlDays]',
         value: settings.blockedTtlDays,
@@ -80,7 +75,8 @@
 
     {{ forms.textField({
         label: 'Retain Scan History (days)'|t('link-audit'),
-        instructions: 'How long finished scan records are kept when <code>php craft link-audit/scan/prune</code> runs. Nothing is thrown away until that command is run. Set 0 to keep the lot.'|t('link-audit'),
+        instructions: 'How long finished scan records are kept when <code>php craft link-audit/scan/prune</code> runs. Set 0 to keep the lot.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Nothing is thrown away until that command is run.'|t('link-audit') ~ '</span>',
         id: 'retainDays',
         name: 'settings[retainDays]',
         value: settings.retainDays,
@@ -93,7 +89,8 @@
 
     {{ forms.lightswitchField({
         label: 'Delete Unreferenced URLs'|t('link-audit'),
-        instructions: 'When a scan finishes, throw away URL rows nothing points at any more, so the table stays the size of your content rather than the size of everything your content has ever said. An author\'s decision to ignore a URL is kept either way: those live in their own table and survive the tidy up.'|t('link-audit'),
+        instructions: 'When a scan finishes, throw away URL rows nothing points at any more, so the table stays the size of your content rather than the size of everything your content has ever said.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'An author\'s decision to ignore a URL is kept either way: those live in their own table and survive the tidy up.'|t('link-audit') ~ '</span>',
         id: 'pruneOrphanUrls',
         name: 'settings[pruneOrphanUrls]',
         on: settings.pruneOrphanUrls,

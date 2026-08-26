@@ -336,7 +336,7 @@
             <div class="pane" id="link-audit-start">
                 <h2>{{ 'Where to start'|t('link-audit') }}</h2>
                 <p class="light">
-                    {{ 'A list this size is not worked front to back. Take it in this order and it shortens fastest.'|t('link-audit') }}
+                    {{ 'There is no need to work through a list this size from the top. Start with these and it comes down quicker.'|t('link-audit') }}
                 </p>
                 <ol>
                     {% if whereToStart.internalBroken > 0 %}
@@ -379,7 +379,7 @@
                             <div class="link-audit-start-body">
                                 <a href="{{ cpUrl('link-audit/broken', { site: siteHandle }) }}">
                                     {{ '{count} of the broken links were still working a week ago'|t('link-audit', { count: whereToStart.recentlyBroken }) }}</a>
-                                <p class="light">{{ 'Fresh breakage is worth catching before it settles into the pile.'|t('link-audit') }}</p>
+                                <p class="light">{{ 'These broke recently, so whatever changed is still fresh in somebody\'s mind.'|t('link-audit') }}</p>
                             </div>
                         </li>
                     {% endif %}
@@ -394,7 +394,7 @@
                     {% endif %}
                 </ol>
                 <p class="light">
-                    {{ 'And what not to start with: Unverifiable is never work, temporary redirects are not work either, and the permanent redirects keep for a quiet week. Broken is the list.'|t('link-audit') }}
+                    {{ 'You can leave the rest for now: Unverifiable and the temporary redirects need nothing from you, and the permanent redirects will keep for a quieter week.'|t('link-audit') }}
                 </p>
             </div>
         {% endif %}
@@ -510,111 +510,4 @@
         </div>
 
     {% endif %}
-
-    {% do view.registerAssetBundle('johnhenry\\linkaudit\\assets\\tour\\TourAsset') %}
-
-    {% js at head %}
-    window.LinkAuditTour = {{ {
-        autoStart: tourAutoStart,
-        seenUrl: tourSeenUrl,
-        steps: tourSteps,
-    }|json_encode|raw }};
-    {% endjs %}
-
-    <p style="margin-top:14px">
-        <button type="button" id="link-audit-tour-start" class="btn small light">
-            {{ 'Take the tour'|t('link-audit') }}
-        </button>
-    </p>
-
-    {% js %}
-    (function() {
-        'use strict';
-
-        var config = window.LinkAuditTour;
-        var trigger = document.getElementById('link-audit-tour-start');
-
-        if (!config || !trigger || !window.driver || !window.driver.js) {
-            return;
-        }
-
-        // What is on this page depends on the state of the install: a site that
-        // has never been scanned has no Last scan pane and no tables under it,
-        // and a reader on a narrow screen has the navigation folded away. A step
-        // pointing at nothing draws an empty box in the corner of the screen, so
-        // the steps are cut down to what is really here before the tour opens.
-        // Cut here rather than skipped as they come round, so the progress count
-        // is the number of stops the reader is actually going to make.
-        var steps = config.steps.filter(function(step) {
-            var element = document.querySelector(step.selector);
-
-            return element !== null && element.getClientRects().length > 0;
-        }).map(function(step) {
-            return {
-                element: step.selector,
-                popover: {
-                    title: step.title,
-                    description: step.text,
-                },
-            };
-        });
-
-        if (!steps.length) {
-            trigger.parentNode.removeChild(trigger);
-
-            return;
-        }
-
-        // A reader who has already been told has nothing left to record, so
-        // taking the tour again costs no request at all.
-        var seen = !config.autoStart;
-
-        function markSeen() {
-            if (seen) {
-                return;
-            }
-
-            seen = true;
-
-            var body = new FormData();
-            body.append(window.Craft.csrfTokenName || window.csrfTokenName, window.Craft.csrfTokenValue || window.csrfTokenValue);
-
-            // Nothing is said out loud either way. Somebody who has just closed
-            // a tour does not want a notice about it, and a preference that
-            // failed to save costs them the tour a second time and nothing else.
-            fetch(config.seenUrl, {
-                method: 'POST',
-                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-                body: body,
-            }).catch(function() {});
-        }
-
-        var tour = window.driver.js.driver({
-            steps: steps,
-            showProgress: true,
-            // Somebody who has asked their machine for less motion gets the
-            // popovers without the sliding.
-            animate: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-            // Belt and braces on top of the filter above: an element that goes
-            // while the tour is open takes its step with it rather than the tour.
-            skipMissingElement: true,
-            nextBtnText: Craft.t('link-audit', 'Next'),
-            prevBtnText: Craft.t('link-audit', 'Back'),
-            doneBtnText: Craft.t('link-audit', 'Done'),
-            // Finished and closed count the same. A tour that keeps coming back
-            // until somebody sits through the whole of it is worse than none.
-            onDestroyed: markSeen,
-        });
-
-        trigger.addEventListener('click', function(event) {
-            event.preventDefault();
-            tour.drive();
-        });
-
-        if (config.autoStart) {
-            tour.drive();
-        }
-    })();
-    {% endjs %}
 {% endblock %}

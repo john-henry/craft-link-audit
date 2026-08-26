@@ -141,9 +141,11 @@ class UrlActionsController extends BaseController
      *
      * @return Response JSON.
      * @throws BadRequestHttpException If the request is not a POST that accepts
-     *                                 JSON.
+     *                                 JSON, or a required parameter is missing.
      * @throws ForbiddenHttpException If the user may not run scans, or may not
      *                                edit the site.
+     * @throws NotFoundHttpException If no element with that id can be seen on
+     *                               the site.
      * @throws Throwable If the element's reference rows cannot be rebuilt.
      * @author John Henry Donovan
      * @since 1.0.0
@@ -161,6 +163,17 @@ class UrlActionsController extends BaseController
             throw new ForbiddenHttpException(
                 Craft::t('link-audit', 'You are not allowed to edit that site.'),
             );
+        }
+
+        // The element is resolved and checked before any work is done. Taking
+        // the id on trust let a posted id that names nothing, or something the
+        // reader may not see, still cost a scan row, an orphan prune sweep and
+        // a notification run before the miss was noticed.
+        $element = Craft::$app->getElements()->getElementById($elementId, null, $siteId);
+        $user = Craft::$app->getUser()->getIdentity();
+
+        if ($element === null || $user === null || !$element->canView($user)) {
+            throw new NotFoundHttpException(Craft::t('link-audit', 'No such page.'));
         }
 
         $count = LinkAudit::$plugin->getScanService()->recheckElementLinks($elementId, $siteId);
