@@ -123,13 +123,20 @@ trait PluginTrait
             ],
         ];
 
-        self::_addNavBadges($item, $site !== null ? (int)$site->id : null);
+        // A screen with no site context, the Dashboard for one, still shows
+        // the navigation, and the badges fall back to the primary site there:
+        // that is the site the unsuffixed links above open, so the numbers
+        // beside them describe the very lists they lead to.
+        self::_addNavBadges(
+            $item,
+            (int)($site->id ?? Craft::$app->getSites()->getPrimarySite()->id),
+        );
 
-        // Admins only, and deliberately not gated on `allowAdminChanges`: the
-        // settings screen is readable on an environment where it cannot be
-        // edited, and hiding the link there would only mean an admin has to
-        // remember the URL to find out how the plugin is configured.
-        if ($user->getIsAdmin()) {
+        // Admins only, and only where admin changes are allowed, the same rule
+        // Craft applies to its own Settings section. The screens themselves
+        // stay reachable by URL on a locked environment, rendered read-only,
+        // for the admin who wants to see how the plugin is configured there.
+        if ($user->getIsAdmin() && Craft::$app->getConfig()->getGeneral()->allowAdminChanges) {
             $item['subnav']['settings'] = [
                 'label' => Craft::t('app', 'Settings'),
                 'url' => 'link-audit/settings',
@@ -192,9 +199,9 @@ trait PluginTrait
     /**
      * @inheritdoc
      *
-     * Clears what dropping the tables does not reach: queued jobs, the tour
-     * preference, the dashboard tiles and the cached counts. What each of those
-     * is and why it is left over is {@see UninstallService}.
+     * Clears what dropping the tables does not reach: queued jobs, the
+     * dashboard tiles and the cached counts. What each of those is and why it
+     * is left over is {@see UninstallService}.
      *
      * Nothing in there is allowed to stop an uninstall. Craft runs this inside
      * the transaction that removes the plugin, so an exception here is a plugin
@@ -277,7 +284,10 @@ trait PluginTrait
             'redirects' => (int)($counts['permanentRedirect'] ?? 0),
             'blocked' => (int)($counts[UrlStatus::Blocked->value] ?? 0),
             'no-answer' => (int)($counts[UrlStatus::Unreachable->value] ?? 0),
-            'ignored' => (int)($counts[UrlStatus::Ignored->value] ?? 0),
+            // Dismissals rather than the ignored verdict count: the Ignored
+            // screen only lists decisions people made, and a badge promising
+            // rule-quieted rows the screen will not show is a badge that lies.
+            'ignored' => (int)($counts['dismissed'] ?? 0),
         ];
 
         // The key is left off at zero rather than set to it. Craft's own chrome

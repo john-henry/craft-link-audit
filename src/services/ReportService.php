@@ -16,6 +16,7 @@ use craft\helpers\Db;
 use DateTimeInterface;
 use johnhenry\linkaudit\enums\ScanStatus;
 use johnhenry\linkaudit\enums\UrlStatus;
+use johnhenry\linkaudit\LinkAudit;
 use johnhenry\linkaudit\models\ExtractedLink;
 use johnhenry\linkaudit\models\Verdict;
 use johnhenry\linkaudit\records\ReferenceRecord;
@@ -110,7 +111,7 @@ class ReportService extends Component
      *
      * @param int $siteId The site being read.
      * @return array<string, int> Verdict value to count, plus
-     *                            `permanentRedirect`, exactly as
+     *                            `permanentRedirect` and `dismissed`, exactly as
      *                            {@see self::verdictCounts()} returns them.
      * @author John Henry Donovan
      * @since 1.0.0
@@ -369,29 +370,35 @@ class ReportService extends Component
     /**
      * The hosts that hold a URL with the given verdict, for the filter menu.
      *
+     * Each label carries the number of URLs the filter would leave, so a
+     * reader can see where the trouble concentrates before choosing. The
+     * count is URLs rather than places, because URLs are what the rows of the
+     * filtered table are, and a dropdown should promise exactly what picking
+     * it delivers.
+     *
      * @param UrlStatus $status The verdict being listed.
      * @param int $siteId The site being read.
-     * @return array<string, string> Host to host, alphabetically, in the shape
-     *                               Craft's select macro takes.
+     * @return array<string, string> Host to labelled host, alphabetically, in
+     *                               the shape Craft's select macro takes.
      * @author John Henry Donovan
      * @since 1.0.0
      */
     public function hostOptions(UrlStatus $status, int $siteId): array
     {
-        $hosts = (new Query())
-            ->select(['u.host'])
-            ->distinct()
+        $rows = (new Query())
+            ->select(['host' => 'u.host', 'total' => 'COUNT(*)'])
             ->from(['u' => UrlRecord::tableName()])
             ->where(['u.status' => $status->value])
             ->andWhere(['exists', $this->_referencedOnSite($siteId)])
             ->andWhere(['not', ['u.host' => '']])
+            ->groupBy(['u.host'])
             ->orderBy(['u.host' => SORT_ASC])
-            ->column();
+            ->all();
 
         $options = [];
 
-        foreach ($hosts as $host) {
-            $options[(string)$host] = (string)$host;
+        foreach ($rows as $row) {
+            $options[(string)$row['host']] = $row['host'] . ' (' . (int)$row['total'] . ')';
         }
 
         return $options;
@@ -523,7 +530,7 @@ class ReportService extends Component
             $references[] = [
                 'element' => $element,
                 'elementType' => $this->elementTypeLabel((string)$row['elementType']),
-                'editUrl' => $canView ? $this->referenceEditUrl($element, $row, $fieldElement) : null,
+                'editUrl' => $canView ? $this->referenceEditUrl($element, $row, $fieldElement, precise: true) : null,
                 'fieldHandle' => $row['fieldHandle'] !== null ? (string)$row['fieldHandle'] : null,
                 'fieldName' => $this->fieldName($row, $fieldElement),
                 'blockType' => $blockType,
@@ -741,6 +748,55 @@ class ReportService extends Component
     }
 
     /**
+     * Where one reference sits on its page, for the edit screen to scroll to.
+     *
+     * The answer behind a `#la-ref-<id>` fragment: the block or field to land
+     * on, plus the raw href and link text that let the exact anchor be picked
+     * out inside a big field. Carries the reference's site so the caller can
+     * fence who is asking before handing any of it over.
+     *
+     * @param int $referenceId The reference row.
+     * @return array{siteId: int, blockId: int|null, fieldHandle: string|null, rawHref: string|null, linkText: string|null}|null
+     *         The location, or null when no such reference exists.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function referenceLocation(int $referenceId): ?array
+    {
+        $row = (new Query())
+            ->select(['elementId', 'ownerElementId', 'siteId', 'fieldHandle', 'rawHref', 'linkText'])
+            ->from([ReferenceRecord::tableName()])
+            ->where(['id' => $referenceId])
+            ->one();
+
+        if (!is_array($row)) {
+            return null;
+        }
+
+        $siteId = (int)$row['siteId'];
+        $refElementId = (int)$row['elementId'];
+        $nested = $row['ownerElementId'] !== null && (int)$row['ownerElementId'] !== $refElementId;
+        $blockId = null;
+        $fieldHandle = $row['fieldHandle'] !== null ? (string)$row['fieldHandle'] : null;
+
+        if ($nested) {
+            $blockId = $refElementId;
+            $nestedElement = Craft::$app->getElements()->getElementById($refElementId, null, $siteId);
+            $fieldHandle = $nestedElement instanceof Entry && $nestedElement->fieldId !== null
+                ? Craft::$app->getFields()->getFieldById((int)$nestedElement->fieldId)?->handle
+                : null;
+        }
+
+        return [
+            'siteId' => $siteId,
+            'blockId' => $blockId,
+            'fieldHandle' => $fieldHandle,
+            'rawHref' => $row['rawHref'] !== null ? (string)$row['rawHref'] : null,
+            'linkText' => $row['linkText'] !== null ? (string)$row['linkText'] : null,
+        ];
+    }
+
+    /**
      * A URL label cut down to the width of the links panel.
      *
      * The panel is a narrow column, and cutting a URL's tail off cuts off the
@@ -898,6 +954,14 @@ class ReportService extends Component
      * export writes the same Edit link the detail screen offers, and a second
      * copy of the fragment logic would drift.
      *
+     * A precise link carries `#la-ref-<id>` instead, naming the reference row
+     * itself: the script on the edit screen asks the reference-location
+     * endpoint where that reference sits, anchor text and raw href included,
+     * and lands on the very anchor rather than the field around it. Only the
+     * control panel's own screens ask for precision, since following it needs
+     * a signed-in reader the endpoint will answer; a CSV opened by anybody
+     * keeps the plainer fragment that works without asking the server.
+     *
      * @param ElementInterface $element The owner element being edited.
      * @param array<string, mixed> $row The reference row.
      * @param ElementInterface|null $fieldElement The element the link is stored
@@ -906,16 +970,26 @@ class ReportService extends Component
      *                                            Matrix field to fall back to
      *                                            when the block itself cannot
      *                                            be found on the page.
+     * @param bool $precise Whether to name the reference row for the edit
+     *                      screen to resolve, rather than the field or block.
      * @return string|null The edit URL, or null when the element has none.
      * @author John Henry Donovan
      * @since 1.0.0
      */
-    public function referenceEditUrl(ElementInterface $element, array $row, ?ElementInterface $fieldElement = null): ?string
-    {
+    public function referenceEditUrl(
+        ElementInterface $element,
+        array $row,
+        ?ElementInterface $fieldElement = null,
+        bool $precise = false,
+    ): ?string {
         $editUrl = $element->getCpEditUrl();
 
         if ($editUrl === null) {
             return null;
+        }
+
+        if ($precise && isset($row['id'])) {
+            return $editUrl . '#la-ref-' . (int)$row['id'];
         }
 
         $fieldHandle = $row['fieldHandle'] !== null ? trim((string)$row['fieldHandle']) : '';
@@ -1144,8 +1218,8 @@ class ReportService extends Component
      *
      * @param int $siteId The site being read.
      * @return array<string, int> Verdict value to count, plus
-     *                            `permanentRedirect` for the redirects worth
-     *                            acting on.
+     * `permanentRedirect`, the redirects worth acting on, and `dismissed`,
+     *                            the count of decisions the Ignored screen lists.
      * @author John Henry Donovan
      * @since 1.0.0
      */
@@ -1164,8 +1238,8 @@ class ReportService extends Component
      *
      * @param int[] $siteIds The sites being read.
      * @return array<string, int> Verdict value to count, plus
-     *                            `permanentRedirect` for the redirects worth
-     *                            acting on.
+     * `permanentRedirect`, the redirects worth acting on, and `dismissed`,
+     *                            the count of decisions the Ignored screen lists.
      * @author John Henry Donovan
      * @since 1.0.0
      */
@@ -1202,6 +1276,13 @@ class ReportService extends Component
             ->where(['u.status' => UrlStatus::Redirect->value, 'u.redirectPermanent' => true])
             ->andWhere(['exists', $this->_referencedOnSite($siteIds)])
             ->count();
+
+        // The Ignored screen lists decisions people made, and nothing else:
+        // rule-quieted URLs and skipped schemes hold the ignored verdict too,
+        // and are deliberately kept off that screen. The badge beside it has
+        // to count what the screen shows, or it promises rows that are not
+        // there.
+        $counts['dismissed'] = LinkAudit::$plugin->getIgnoreService()->ignoredCount($siteIds);
 
         return $counts;
     }

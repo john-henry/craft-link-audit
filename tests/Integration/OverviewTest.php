@@ -262,7 +262,6 @@ describe('The overview screen', function() {
 
         $this->get('admin/link-audit')
             ->assertOk()
-            ->assertSee('Where things stand')
             ->assertSee('Hosts giving the most trouble')
             ->assertSee('2 minutes');
     });

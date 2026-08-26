@@ -332,7 +332,12 @@ class UrlStore extends Component
             $columns['dateLastOk'] = $checkedAt;
         }
 
-        if ($status === UrlStatus::Broken) {
+        // Stamped only when the URL crosses into broken, not on every recheck
+        // that finds it still broken. The date then means when it broke, which
+        // is what the "new broken links" notification counts from: restamping
+        // it on a re-confirmation made a rescan or a page recheck report the
+        // same standing failures as though they had just appeared.
+        if ($status === UrlStatus::Broken && (string)$row['status'] !== UrlStatus::Broken->value) {
             $columns['dateLastBroken'] = $checkedAt;
         }
 

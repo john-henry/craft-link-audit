@@ -32,16 +32,21 @@
 } %}
 {% set selectedTab = tab %}
 
+{% if readOnly %}
+    {% set contentNotice = readOnlyNotice() %}
+    {% css %}
+    #content .btn.add,
+    #content .btn.add:hover,
+    #content .btn.add:focus {
+        opacity: .4 !important;
+        pointer-events: none !important;
+        cursor: default !important;
+    }
+    {% endcss %}
+{% endif %}
+
 {% block content %}
-    {% if readOnly %}
-        <div class="readable">
-            <blockquote class="note warning">
-                <p>
-                    {{ 'Administrative changes are turned off on this environment, so these settings can be read but not changed here. Edit them where changes are allowed, or set them in config/link-audit.php.'|t('link-audit') }}
-                </p>
-            </blockquote>
-        </div>
-    {% else %}
+    {% if not readOnly %}
         {{ actionInput('link-audit/settings/save-' ~ tab) }}
         {{ redirectInput('link-audit/settings/' ~ tab) }}
     {% endif %}

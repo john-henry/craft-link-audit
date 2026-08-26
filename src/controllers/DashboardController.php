@@ -8,7 +8,6 @@ namespace johnhenry\linkaudit\controllers;
 
 use Craft;
 use craft\helpers\DateTimeHelper;
-use craft\helpers\UrlHelper;
 use DateTimeInterface;
 use johnhenry\linkaudit\enums\ScanMode;
 use johnhenry\linkaudit\enums\ScanStatus;
@@ -49,12 +48,10 @@ class DashboardController extends BaseController
     public function actionIndex(): Response
     {
         $report = LinkAudit::$plugin->getReportService();
-        $tour = LinkAudit::$plugin->getTourService();
         $site = $this->requestedSite();
         $siteId = (int)$site->id;
         $latestScan = $report->latestScan();
         $runningScan = $report->runningScan();
-        $identity = Craft::$app->getUser()->getIdentity();
         $canRunScans = Craft::$app->getUser()->checkPermission(self::PERMISSION_RUN_SCANS);
         $counts = $report->verdictCounts($siteId);
 
@@ -102,20 +99,6 @@ class DashboardController extends BaseController
                 : null,
             'topHosts' => $report->topHosts($siteId),
             'topPages' => $report->topPages($siteId),
-            // The tour explains what the counts mean, so it runs itself the
-            // first time somebody opens this and never again unasked. The link
-            // at the bottom of the page is how it comes back.
-            //
-            // Not on an install that has never been scanned, though. The tiles
-            // and the panes are the tour's whole subject and none of them are on
-            // the page yet, so it would open on whatever is left, say nothing
-            // worth reading, and record itself as seen: the one reader who
-            // needed it would never be offered it again.
-            'tourAutoStart' => $identity !== null
-                && ($latestScan !== null || $runningScan !== null)
-                && !$tour->hasSeen($identity),
-            'tourSeenUrl' => UrlHelper::actionUrl('link-audit/tour/seen'),
-            'tourSteps' => $tour->stepsForOverview($canRunScans),
         ]);
     }
 }

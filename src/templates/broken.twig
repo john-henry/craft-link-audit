@@ -18,7 +18,7 @@
 
 {% block content %}
     <p class="light">
-        {{ 'These are gone. The website answered with a 404 or a 410, the codes for a page that is not there any more, or the link failed enough times in a row to be counted as gone. Each one is a link somebody clicks and lands nowhere, so put the right address in or take the link out.'|t('link-audit') }}
+        {{ 'The website answered each of these with a 404 or a 410, the codes for a page that is not there any more, or the link failed enough times in a row to be counted as gone. Anybody clicking one of them lands nowhere, so put the right address in or take the link out.'|t('link-audit') }}
     </p>
 
     {% include 'link-audit/_includes/url-table' with {

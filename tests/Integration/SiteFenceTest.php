@@ -136,6 +136,66 @@ describe('A URL only another site points at', function() {
     });
 });
 
+describe('A reference only another site points at', function() {
+    it('is a 404 on the reference-location endpoint', function() {
+        $store = LinkAudit::getInstance()->getUrlStore();
+        $urlId = $store->upsert('https://example.com/fenced-reference', false);
+        $store->recordVerdict($urlId, new Verdict(status: UrlStatus::Broken, httpStatus: 404));
+        $store->replaceReferencesFor(
+            (int)UserFactory::factory()->create()->id,
+            (int)fenceOtherSite()->id,
+            [['urlId' => $urlId, 'elementType' => User::class]],
+        );
+        $referenceId = (int)(new craft\db\Query())
+            ->select(['id'])
+            ->from([johnhenry\linkaudit\records\ReferenceRecord::tableName()])
+            ->where(['urlId' => $urlId])
+            ->scalar();
+
+        $this->actingAs(fenceReader());
+
+        expect(fn() => test()->http('get', "actions/link-audit/urls/reference-location?id=$referenceId")
+            ->addHeader('Accept', 'application/json')
+            ->send())->toThrow(NotFoundHttpException::class);
+    });
+
+    it('answers an unknown reference id with the same 404', function() {
+        $this->actingAs(fenceReader());
+
+        expect(fn() => test()->http('get', 'actions/link-audit/urls/reference-location?id=99999999')
+            ->addHeader('Accept', 'application/json')
+            ->send())->toThrow(NotFoundHttpException::class);
+    });
+});
+
+describe('A page recheck', function() {
+    it('is a 404 for an element the reader may not see', function() {
+        $this->actingAs(fenceReader());
+
+        expect(fn() => test()->http('post', 'actions/link-audit/url-actions/recheck-element')
+            ->withCsrfToken()
+            ->addHeader('Accept', 'application/json')
+            ->setBody([
+                'elementId' => 99999999,
+                'siteId' => (int)Craft::$app->getSites()->getPrimarySite()->id,
+            ])
+            ->send())->toThrow(NotFoundHttpException::class);
+    });
+
+    it('refuses a site the reader may not edit', function() {
+        $this->actingAs(fenceReader());
+
+        expect(fn() => test()->http('post', 'actions/link-audit/url-actions/recheck-element')
+            ->withCsrfToken()
+            ->addHeader('Accept', 'application/json')
+            ->setBody([
+                'elementId' => (int)UserFactory::factory()->create()->id,
+                'siteId' => (int)fenceOtherSite()->id,
+            ])
+            ->send())->toThrow(yii\web\ForbiddenHttpException::class);
+    });
+});
+
 describe('A URL this reader\'s own site points at', function() {
     it('opens on the detail page', function() {
         $hash = fenceSeed(

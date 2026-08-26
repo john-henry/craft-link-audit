@@ -166,6 +166,41 @@ class IgnoreService extends Component
     }
 
     /**
+     * How many dismissals the Ignored screen would list.
+     *
+     * The same scoping {@see self::ignoredUrls()} applies, so the number on
+     * the navigation badge is the number of rows behind the link: decisions
+     * about URLs the given sites point at, plus decisions whose URL row has
+     * gone, which are listed for everybody since there is nothing left to
+     * scope them by.
+     *
+     * @param int[]|null $siteIds The sites whose content scopes the answer, or
+     *                            null for every decision.
+     * @return int The count.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function ignoredCount(?array $siteIds = null): int
+    {
+        $query = (new Query())
+            ->from(['i' => IgnoreRecord::tableName()])
+            ->leftJoin(['u' => UrlRecord::tableName()], '[[u.urlHash]] = [[i.urlHash]]')
+            ->where(['i.scope' => self::SCOPE_URL]);
+
+        if ($siteIds !== null) {
+            $references = (new Query())
+                ->select(['r.id'])
+                ->from(['r' => ReferenceRecord::tableName()])
+                ->where('[[r.urlId]] = [[u.id]]')
+                ->andWhere(['r.siteId' => $siteIds]);
+
+            $query->andWhere(['or', ['u.id' => null], ['exists', $references]]);
+        }
+
+        return (int)$query->count();
+    }
+
+    /**
      * Records an author's decision to stop reporting one URL, and takes it out
      * of the lists there and then.
      *

@@ -11,7 +11,8 @@
     {% if elementTypeChoices|length %}
         {{ forms.checkboxSelectField({
             label: 'Scanned Element Types'|t('link-audit'),
-            instructions: 'Tick what a scan should read. Out of the box that is entries, categories, tags and global sets, plus Commerce products and variants. Everything else stays out until you tick it here, orders and users included: there are an awful lot of them and no editor ever typed a link into one. Untick the lot and a scan reads nothing at all.'|t('link-audit'),
+            instructions: 'Tick what a scan should read.'|t('link-audit')
+                ~ ' <span class="info">' ~ 'Out of the box that is entries, categories, tags and global sets, plus Commerce products and variants. Everything else stays out until you tick it here, orders and users included: there are an awful lot of them and no editor ever typed a link into one. Untick the lot and a scan reads nothing at all.'|t('link-audit') ~ '</span>',
             id: 'scannedElementTypes',
             name: 'settings[scannedElementTypes]',
             options: elementTypeChoices,
@@ -23,7 +24,8 @@
 
     {{ forms.lightswitchField({
         label: 'Scan On Element Save'|t('link-audit'),
-        instructions: 'Pull the links out of an element again every time somebody saves it, so a link pasted in this morning is on the report without waiting for the next full scan. A link to one of your own pages an element or a route answers for is settled there and then. Anything that has to be asked for over the wire is left waiting for the next check, since a save is no time to be firing off requests. Bulk resaves and drafts are left alone.'|t('link-audit'),
+        instructions: 'Pull the links out of an element again every time somebody saves it, so a link pasted in this morning is on the report without waiting for the next full scan.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'A link to one of your own pages an element or a route answers for is settled there and then. Anything that has to be asked for over the wire is left waiting for the next check, since a save is no time to be firing off requests. Bulk resaves and drafts are left alone.'|t('link-audit') ~ '</span>',
         id: 'scanOnSave',
         name: 'settings[scanOnSave]',
         on: settings.scanOnSave,
@@ -34,7 +36,8 @@
 
     {{ forms.lightswitchField({
         label: 'Check Internal Links'|t('link-audit'),
-        instructions: 'Check the links that point at your own sites. A link to a page one of your elements or routes answers for is settled out of the database rather than over HTTP, because asking your own server about a page it just rendered is a request paid for twice. Anything the database cannot account for is asked for over HTTP like any other link, so a redirect rule, a rewrite or a file gets an honest answer instead of being called broken. Turn this off and links to your own sites are left out of the reports altogether.'|t('link-audit'),
+        instructions: 'Check the links that point at your own sites.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'A link to a page one of your elements or routes answers for is settled out of the database rather than over HTTP, because asking your own server about a page it just rendered is a request paid for twice. Anything the database cannot account for is asked for over HTTP like any other link, so a redirect rule, a rewrite or a file gets an honest answer instead of being called broken. Turn this off and links to your own sites are left out of the reports altogether.'|t('link-audit') ~ '</span>',
         id: 'checkInternalLinks',
         name: 'settings[checkInternalLinks]',
         on: settings.checkInternalLinks,
@@ -45,7 +48,8 @@
 
     {{ forms.lightswitchField({
         label: 'Check Image Sources'|t('link-audit'),
-        instructions: 'Include the images found in rich text. A missing image is as broken as a missing page, and nobody notices it in the content editor.'|t('link-audit'),
+        instructions: 'Include the images found in rich text.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'A missing image is as broken as a missing page, and nobody notices it in the content editor.'|t('link-audit') ~ '</span>',
         id: 'checkImages',
         name: 'settings[checkImages]',
         on: settings.checkImages,
@@ -56,7 +60,8 @@
 
     {{ forms.lightswitchField({
         label: 'Check Iframe Sources'|t('link-audit'),
-        instructions: 'Include embeds. Off by default, because the places people embed from block automated requests as a matter of course, and there is rarely much you can do about the answer.'|t('link-audit'),
+        instructions: 'Include embeds.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Off by default, because the places people embed from block automated requests as a matter of course, and there is rarely much you can do about the answer.'|t('link-audit') ~ '</span>',
         id: 'checkIframes',
         name: 'settings[checkIframes]',
         on: settings.checkIframes,
@@ -67,7 +72,8 @@
 
     {{ forms.lightswitchField({
         label: 'Scan Navigation Nodes'|t('link-audit'),
-        instructions: 'Read the links in your navigations as well as the ones in your content. Worth leaving on: a nav link lives on the node rather than in anybody\'s entry, so nothing else in a scan ever sees it, which is why navigations quietly carry links nobody has checked in years.'|t('link-audit'),
+        instructions: 'Read the links in your navigations as well as the ones in your content.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Worth leaving on: a nav link lives on the node rather than in anybody\'s entry, so nothing else in a scan ever sees it, which is why navigations quietly carry links nobody has checked in years.'|t('link-audit') ~ '</span>',
         id: 'scanNavigationNodes',
         name: 'settings[scanNavigationNodes]',
         on: settings.scanNavigationNodes,
@@ -78,7 +84,8 @@
 
     {{ forms.lightswitchField({
         label: 'Crawl Rendered Pages'|t('link-audit'),
-        instructions: 'Fetch each of your own pages over HTTP and read the links out of the HTML a visitor actually gets. This is the only way to catch what a template hard-codes: the footer, the main nav, the widget somebody dropped into a layout years ago. None of that is in anybody\'s content, so nothing else in a scan will ever see it. It costs one request per page against your own server, so keep the page cap sensible and leave this off if your site is very large or the server is tight.'|t('link-audit'),
+        instructions: 'Fetch each of your own pages over HTTP and read the links out of the HTML a visitor actually gets.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'This is the only way to catch what a template hard-codes: the footer, the main nav, the widget somebody dropped into a layout years ago. None of that is in anybody\'s content, so nothing else in a scan will ever see it. It costs one request per page against your own server, so keep the page cap sensible and leave this off if your site is very large or the server is tight.'|t('link-audit') ~ '</span>',
         id: 'renderedCrawlEnabled',
         name: 'settings[renderedCrawlEnabled]',
         on: settings.renderedCrawlEnabled,
@@ -91,7 +98,8 @@
     <div id="la-crawl-options" class="{{ settings.renderedCrawlEnabled ? '' : 'hidden' }}" style="padding-left:24px">
         {{ forms.textField({
             label: 'Maximum Pages Per Crawl'|t('link-audit'),
-            instructions: 'The ceiling on how many pages one crawl fetches. Pages are taken in a fixed order and whatever is left over is named in the log, so a crawl that stops short says so rather than quietly handing you a report that looks complete.'|t('link-audit'),
+            instructions: 'The ceiling on how many pages one crawl fetches.'|t('link-audit')
+                ~ ' <span class="info">' ~ 'Pages are taken in a fixed order and whatever is left over is named in the log, so a crawl that stops short says so rather than quietly handing you a report that looks complete.'|t('link-audit') ~ '</span>',
             id: 'maxPagesToCrawl',
             name: 'settings[maxPagesToCrawl]',
             value: settings.maxPagesToCrawl,
@@ -105,7 +113,8 @@
 
         {{ forms.lightswitchField({
             label: 'Validate Anchor Fragments'|t('link-audit'),
-            instructions: 'Check the bit after the hash as well as the address in front of it. A link to <code>/about#team</code> is only right if something on that page carries that id, and renaming a heading breaks every link pointing at it without anything else noticing. The target page is fetched to find out, so this rides on the crawl above and is off when that is.'|t('link-audit'),
+            instructions: 'Check the bit after the hash as well as the address in front of it.'|t('link-audit')
+                ~ ' <span class="info">' ~ 'A link to <code>/about#team</code> is only right if something on that page carries that id, and renaming a heading breaks every link pointing at it without anything else noticing. The target page is fetched to find out, so this rides on the crawl above and is off when that is.'|t('link-audit') ~ '</span>',
             id: 'checkAnchorFragments',
             name: 'settings[checkAnchorFragments]',
             on: settings.checkAnchorFragments,
@@ -117,7 +126,8 @@
 
     {{ forms.lightswitchField({
         label: 'Scan Relation Fields'|t('link-audit'),
-        instructions: 'Record entries, assets and categories picked in relation fields too. Off by default, since Craft already guarantees the target row is there. Turn it on to catch a target that has been disabled or removed. A target with no URL of its own is not flagged, since a relation only picks an element, it never asserts the element renders a link.'|t('link-audit'),
+        instructions: 'Record entries, assets and categories picked in relation fields too. Off by default, since Craft already guarantees the target row is there.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Turn it on to catch a target that has been disabled or removed. A target with no URL of its own is not flagged, since a relation only picks an element, it never asserts the element renders a link.'|t('link-audit') ~ '</span>',
         id: 'scanRelationFields',
         name: 'settings[scanRelationFields]',
         on: settings.scanRelationFields,
@@ -128,7 +138,8 @@
 
     {{ forms.lightswitchField({
         label: 'Scan Plain Text Fields'|t('link-audit'),
-        instructions: 'Also read Plain Text fields and Table cells, and check anything in them that starts with http or https. Turn this on if your site keeps real link addresses in plain text fields, a Video URL field for instance. Off by default because an address typed into plain text is often just a note or an example, not a link a visitor can click, and checking those fills the report with things nobody can fix.'|t('link-audit'),
+        instructions: 'Also read Plain Text fields and Table cells, and check anything in them that starts with http or https.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Turn this on if your site keeps real link addresses in plain text fields, a Video URL field for instance. Off by default because an address typed into plain text is often just a note or an example, not a link a visitor can click, and checking those fills the report with things nobody can fix.'|t('link-audit') ~ '</span>',
         id: 'scanPlainTextUrls',
         name: 'settings[scanPlainTextUrls]',
         on: settings.scanPlainTextUrls,
@@ -162,10 +173,17 @@
             siteId: { type: 'select', heading: 'Site'|t('link-audit'), options: siteOptions, thin: true },
         }) %}
     {% endif %}
+    {% set uriPatternInfo = 'A regular expression, tested against the URI with no leading slash. A blank pattern matches the homepage.'|t('link-audit')
+        ~ "\n\n" ~ '`.*` matches everything.'|t('link-audit')
+        ~ "\n\n" ~ '`^news/` matches everything under news.'|t('link-audit')
+        ~ "\n\n" ~ '`archive$` matches anything ending in archive.'|t('link-audit')
+        ~ "\n\n" ~ '`^about$` matches that one page exactly.'|t('link-audit') %}
+
     {% set uriCols = uriCols|merge({
         uriPattern: {
             type: 'singleline',
             heading: 'URI Pattern'|t('link-audit'),
+            info: uriPatternInfo,
             placeholder: 'Leave blank to match the homepage'|t('link-audit'),
             code: true,
         },
@@ -173,17 +191,18 @@
 
     {{ forms.editableTableField({
         label: 'Excluded URI Patterns'|t('link-audit'),
-        instructions: 'Pages whose URI matches one of these regular expressions are left out of every scan. Handy for checkout, print views and anything else nobody is going to fix a link on. Examples: <code>^checkout</code>, <code>print$</code>, <code>^admin/</code>.'|t('link-audit'),
+        instructions: 'Pages whose URI matches one of these regular expressions are left out of every scan.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Handy for checkout, print views and anything else nobody is going to fix a link on. Examples: <code>^checkout</code>, <code>print$</code>, <code>^admin/</code>.'|t('link-audit') ~ '</span>',
         id: 'excludedUriPatterns',
         name: 'settings[excludedUriPatterns]',
         cols: uriCols,
         rows: settings.excludedUriPatterns,
         addRowLabel: 'Add a URI pattern'|t('link-audit'),
         warning: config.excludedUriPatterns is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
-        allowAdd: not (readOnly or config.excludedUriPatterns is defined),
-        allowDelete: not (readOnly or config.excludedUriPatterns is defined),
-        allowReorder: not (readOnly or config.excludedUriPatterns is defined),
-        static: readOnly or config.excludedUriPatterns is defined,
+        allowAdd: not (config.excludedUriPatterns is defined),
+        allowDelete: not (config.excludedUriPatterns is defined),
+        allowReorder: not (config.excludedUriPatterns is defined),
+        static: config.excludedUriPatterns is defined,
     }) }}
 
     {% set sectionOptions = [] %}
@@ -193,7 +212,8 @@
 
     {{ forms.checkboxSelectField({
         label: 'Excluded Sections'|t('link-audit'),
-        instructions: 'Sections to leave out of the audit altogether. An excluded section is fenced both ways: its entries are never read for links, and a link or relation pointing at one of its entries is recorded as ignored rather than judged. Use it for a section whose entries are data a template reads rather than pages anybody visits, the case the URI patterns above cannot reach, since those entries have no URI to match.'|t('link-audit'),
+        instructions: 'Sections to leave out of the audit altogether.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'An excluded section is fenced both ways: its entries are never read for links, and a link or relation pointing at one of its entries is recorded as ignored rather than judged. Use it for a section whose entries are data a template reads rather than pages anybody visits, the case the URI patterns above cannot reach, since those entries have no URI to match.'|t('link-audit') ~ '</span>',
         id: 'excludedSectionUids',
         name: 'settings[excludedSectionUids]',
         options: sectionOptions,
@@ -210,7 +230,8 @@
     {% if groupOptions|length %}
         {{ forms.checkboxSelectField({
             label: 'Excluded Category Groups'|t('link-audit'),
-            instructions: 'The same fence for taxonomy. A category group without its own pages is the usual way categories are built, and a link or relation pointing at one of its categories should not be reported broken for having no page.'|t('link-audit'),
+            instructions: 'The same fence for taxonomy.'|t('link-audit')
+                ~ ' <span class="info">' ~ 'A category group without its own pages is the usual way categories are built, and a link or relation pointing at one of its categories should not be reported broken for having no page.'|t('link-audit') ~ '</span>',
             id: 'excludedCategoryGroupUids',
             name: 'settings[excludedCategoryGroupUids]',
             options: groupOptions,
@@ -222,19 +243,25 @@
 
     {{ forms.editableTableField({
         label: 'Always Valid Internal URLs'|t('link-audit'),
-        instructions: 'Internal addresses that are fine even though nothing in the database answers to them: a route another plugin registers at runtime, a file the web server hands out itself, that sort of thing. Each row is a regular expression tested against the URI, so <code>^api/</code> covers everything under that path. A match is taken on trust and never asked for over HTTP, so this is also how you keep a scan away from a path that should not be requested at all.'|t('link-audit'),
+        instructions: 'Internal addresses that are fine even though nothing in the database answers to them: a route another plugin registers at runtime, a file the web server hands out itself, that sort of thing.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Each row is a regular expression tested against the URI, so <code>^api/</code> covers everything under that path. A match is taken on trust and never asked for over HTTP, so this is also how you keep a scan away from a path that should not be requested at all.'|t('link-audit') ~ '</span>',
         id: 'internalUrlAllowPatterns',
         name: 'settings[internalUrlAllowPatterns]',
         cols: {
-            pattern: { type: 'singleline', heading: 'URI Pattern'|t('link-audit'), code: true },
+            pattern: {
+                type: 'singleline',
+                heading: 'URI Pattern'|t('link-audit'),
+                info: uriPatternInfo,
+                code: true,
+            },
             note: { type: 'singleline', heading: 'Note'|t('link-audit') },
         },
         rows: settings.internalUrlAllowPatterns,
         addRowLabel: 'Add a pattern'|t('link-audit'),
         warning: config.internalUrlAllowPatterns is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
-        allowAdd: not (readOnly or config.internalUrlAllowPatterns is defined),
-        allowDelete: not (readOnly or config.internalUrlAllowPatterns is defined),
-        allowReorder: not (readOnly or config.internalUrlAllowPatterns is defined),
-        static: readOnly or config.internalUrlAllowPatterns is defined,
+        allowAdd: not (config.internalUrlAllowPatterns is defined),
+        allowDelete: not (config.internalUrlAllowPatterns is defined),
+        allowReorder: not (config.internalUrlAllowPatterns is defined),
+        static: config.internalUrlAllowPatterns is defined,
     }) }}
 {% endblock %}

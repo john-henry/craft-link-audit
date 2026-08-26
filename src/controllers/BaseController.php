@@ -55,7 +55,6 @@ abstract class BaseController extends Controller
      * against the templates and say when the two have drifted.
      */
     public const JS_TRANSLATIONS = [
-        'Back',
         'Check again',
         'Checked: {verdict} ({code}).',
         'Checked: {verdict}.',
@@ -63,14 +62,13 @@ abstract class BaseController extends Controller
         'Copy the new address',
         'Copy this URL',
         'Do something',
-        'Done',
         'Goes To',
         'Host',
         'Ignore',
         'Last Checked',
-        'Next',
         'Nothing matches those filters. Loosen them and the rest comes back.',
         'Open in a new tab',
+        'Opens the report for this link, not the link itself.',
         'Permanent',
         'Places',
         'Search these URLs',

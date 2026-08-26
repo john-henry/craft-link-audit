@@ -102,12 +102,28 @@ describe('UrlsController::actionDetail', function() {
             // The Edit link opens the entry the author can actually edit, not
             // the block the link was stored against.
             ->assertSee($entry->getCpEditUrl())
-            // The fragment the edit screen's scroller turns into a scroll to
-            // the block itself.
-            ->assertSee('#la-block-' . $block->id, false)
+            // The precise fragment: it names the reference row, and the edit
+            // screen asks the server where that sits.
+            ->assertSee('#la-ref-', false)
             // Named by the block's own type, so the author knows which block
             // on the page to open.
             ->assertSee('(in a ' . $block->getType()->name . ' block)');
+
+        // The location behind that fragment: the block, the Matrix field to
+        // fall back to, and the raw href and text that pick the anchor out.
+        $referenceId = (int)(new craft\db\Query())
+            ->select(['r.id'])
+            ->from(['r' => johnhenry\linkaudit\records\ReferenceRecord::tableName()])
+            ->innerJoin(['u' => johnhenry\linkaudit\records\UrlRecord::tableName()], '[[u.id]] = [[r.urlId]]')
+            ->where(['u.urlHash' => sha1('https://example.com/in-a-block'), 'r.siteId' => $siteId])
+            ->scalar();
+        $location = LinkAudit::getInstance()->getReportService()->referenceLocation($referenceId);
+
+        expect($location)->not->toBeNull()
+            ->and($location['blockId'])->toBe((int)$block->id)
+            ->and($location['fieldHandle'])->toBe('laBlocks')
+            ->and($location['rawHref'])->toBe('https://example.com/in-a-block')
+            ->and($location['linkText'])->toBe('Block link');
     });
 
     it('shows the verdict it holds', function() {

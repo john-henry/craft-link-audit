@@ -231,6 +231,8 @@ describe('The export service', function() {
     it('writes the header row the columns are named for', function() {
         $rows = exportRows(exportCsv(UrlStatus::Broken, [exportSiteId()]));
 
+        // No redirect columns: they say nothing on a broken export, so they are
+        // left off rather than trailing two empty columns.
         expect($rows[0])->toBe([
             'Page',
             'Edit URL',
@@ -243,8 +245,6 @@ describe('The export service', function() {
             'Verdict',
             'Reason',
             'Response Code',
-            'Redirect Code',
-            'Goes To',
             'Host',
             'Found Via',
             'Places Total',
@@ -276,7 +276,7 @@ describe('The export service', function() {
 
         foreach (array_slice($rows, 1) as $row) {
             expect($row[7])->toBe('https://example.com/in-three-places')
-                ->and($row[15])->toBe('3');
+                ->and($row[13])->toBe('3');
         }
 
         // Three rows, three different pages named on them.
@@ -338,11 +338,11 @@ describe('The export service', function() {
         expect($row[8])->toBe('No Answer')
             ->and($row[9])->toBe('Timed out')
             ->and($row[10])->toBe('503')
-            ->and($row[13])->toBe('example.com')
+            ->and($row[11])->toBe('example.com')
             ->and($row[3])->toBe('User')
             ->and($row[4])->toBe(Craft::$app->getSites()->getPrimarySite()->name)
             ->and($row[6])->toBe('Our brochure')
-            ->and($row[14])->toBe('A navigation');
+            ->and($row[12])->toBe('A navigation');
     });
 
     it('carries both redirect codes and where the link ends up', function() {
@@ -374,8 +374,8 @@ describe('The export service', function() {
 
         $row = exportRows(exportCsv(UrlStatus::Broken, [exportSiteId()]))[1];
 
-        expect($row[16])->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/')
-            ->and($row[17])->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/');
+        expect($row[14])->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/')
+            ->and($row[15])->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/');
     });
 
     it('keeps each verdict to its own file', function() {
@@ -472,7 +472,7 @@ describe('The filters', function() {
         );
 
         expect($rows)->toHaveCount(1)
-            ->and($rows[0][15])->toBe('1');
+            ->and($rows[0][13])->toBe('1');
     });
 
     it('honours what was typed into the table\'s search box', function() {

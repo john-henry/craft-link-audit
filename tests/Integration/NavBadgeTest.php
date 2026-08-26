@@ -40,6 +40,10 @@ function navBadgeClearUrls(): void
     $db = Craft::$app->getDb();
     $db->createCommand()->delete(ReferenceRecord::tableName())->execute();
     $db->createCommand()->delete(UrlRecord::tableName())->execute();
+    // Dismissals too: the ignored badge counts those, and a decision left
+    // behind by the development database would badge the screen from beyond
+    // its cleared URL row.
+    $db->createCommand()->delete(johnhenry\linkaudit\records\IgnoreRecord::tableName())->execute();
 
     LinkAudit::getInstance()->getReportService()->invalidateCounts();
 }
@@ -140,7 +144,10 @@ it('badges the section with the broken count and each list with its own', functi
         ->and($item['subnav']['redirects']['badgeCount'])->toBe(1)
         ->and($item['subnav']['blocked']['badgeCount'])->toBe(1)
         ->and($item['subnav']['no-answer']['badgeCount'])->toBe(1)
-        ->and($item['subnav']['ignored']['badgeCount'])->toBe(1)
+        // A URL holding the ignored verdict without a dismissal behind it, a
+        // rule-quieted one or a skipped scheme, is not on the Ignored screen,
+        // so it earns that screen no badge.
+        ->and($item['subnav']['ignored'])->not->toHaveKey('badgeCount')
         // The overview is not a list of anything, so there is nothing to count
         // on it.
         ->and($item['subnav']['overview'])->not->toHaveKey('badgeCount');

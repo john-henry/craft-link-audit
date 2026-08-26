@@ -55,8 +55,8 @@
                 }) }}
             {% endif %}
 
-            <div class="field">
-                <button type="submit" class="btn">{{ 'Apply'|t('link-audit') }}</button>
+            <div class="field link-audit-filter-apply">
+                <button type="submit" class="btn submit">{{ 'Apply'|t('link-audit') }}</button>
             </div>
 
             {% set exportParams = {
@@ -69,7 +69,7 @@
                 internal: filters.internal,
             }|filter(value => value is not null and value != '') %}
 
-            <div class="field">
+            <div class="field link-audit-filter-export">
                 <a class="btn" data-icon="download" id="link-audit-export"
                    href="{{ actionUrl('link-audit/export/csv', exportParams) }}">
                     {{ 'Download CSV'|t('link-audit') }}
@@ -79,6 +79,15 @@
     </form>
 
     {% css %}
+    .link-audit-filter-export { margin-inline-start: auto; }
+    @media (max-width: 672px) {
+        #link-audit-filters .flex > .field { flex: 1 1 calc(50% - 14px); min-width: 0; }
+        #link-audit-filters .select, #link-audit-filters select { width: 100%; }
+        .link-audit-filter-apply, .link-audit-filter-export { flex: 1 1 100%; }
+        .link-audit-filter-apply .btn, .link-audit-filter-export .btn { width: 100%; justify-content: center; }
+        .link-audit-filter-export { margin-inline-start: 0; }
+        #link-audit-table-wrap .la-col-sm-hide { display: none; }
+    }
     #link-audit-table-wrap table.data tbody td { padding-block: var(--m); }
     #link-audit-table-wrap .link-audit-cell { display: flex; align-items: center; gap: var(--s); flex-wrap: wrap; }
     .link-audit-code { display: inline-block; padding: 1px 7px; border-radius: var(--radius-md); font-size: 12px; font-weight: 600; }
@@ -137,13 +146,27 @@
             return value.length > 70 ? value.substring(0, 69) + '…' : value;
         }
 
+        // Craft.escapeHtml escapes for text content and leaves quotes alone, so
+        // it is unsafe for an attribute value: an address a browser accepts can
+        // carry a double quote, and everything in these cells, the URL most of
+        // all, is content somebody typed. This one escapes the quotes as well,
+        // for anything going inside title=, href= or a data attribute.
+        function escAttr(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         function urlCell(value) {
             if (!value) {
                 return '';
             }
 
-            var copyLabel = Craft.escapeHtml(Craft.t('link-audit', 'Copy this URL'));
-            var openLabel = Craft.escapeHtml(Craft.t('link-audit', 'Open in a new tab'));
+            var copyLabel = escAttr(Craft.t('link-audit', 'Copy this URL'));
+            var openLabel = escAttr(Craft.t('link-audit', 'Open in a new tab'));
 
             // The icon controls carry their label on `aria-label` and hold no
             // child nodes, which is how Craft's own copytext button is built.
@@ -151,16 +174,19 @@
             // its icon the 5px trailing margin meant to separate an icon from
             // its text, and an icon-only button comes out lopsided.
             // A stand-in row carries its target element's title as the label;
-            // everything else labels itself with its own address.
+            // everything else labels itself with its own address. The hover
+            // title says where the click goes, because a blue URL reads as
+            // "visit this address" and the click does no such thing.
             var html = '<span class="link-audit-cell">'
-                + '<a href="' + Craft.escapeHtml(value.detailUrl) + '" title="' + Craft.escapeHtml(value.full) + '">'
+                + '<a href="' + escAttr(value.detailUrl) + '" title="'
+                + escAttr(value.full + '\n' + Craft.t('link-audit', 'Opens the report for this link, not the link itself.')) + '">'
                 + Craft.escapeHtml(truncate(value.label || value.full)) + '</a>';
 
             // A stand-in row for an element link holds an internal marker, not
             // an address, so there is nothing worth copying from it.
             if (value.copyable) {
                 html += '<button type="button" class="btn small" data-icon="clipboard"'
-                    + ' data-link-audit-copy="' + Craft.escapeHtml(value.full) + '"'
+                    + ' data-link-audit-copy="' + escAttr(value.full) + '"'
                     + ' title="' + copyLabel + '" aria-label="' + copyLabel + '"></button>';
             }
 
@@ -169,7 +195,7 @@
             // schemes the checker follows are handed out as a link; the rest
             // keep the detail link and the copy button and nothing else.
             if (value.openable) {
-                html += '<a href="' + Craft.escapeHtml(value.full) + '" target="_blank" rel="noopener noreferrer"'
+                html += '<a href="' + escAttr(value.full) + '" target="_blank" rel="noopener noreferrer"'
                     + ' data-icon="external" title="' + openLabel + '" aria-label="' + openLabel + '"></a>';
             }
 
@@ -181,7 +207,7 @@
         // the server's end. Anything nonstandard lands in amber too.
         function codeBadge(code, title) {
             var kind = code < 300 ? '2xx' : (code < 400 ? '3xx' : (code < 500 ? '4xx' : '5xx'));
-            var hover = title ? ' title="' + Craft.escapeHtml(title) + '"' : '';
+            var hover = title ? ' title="' + escAttr(title) + '"' : '';
 
             return '<span class="link-audit-code link-audit-code--' + kind + '"' + hover + '>' + code + '</span>';
         }
@@ -217,16 +243,16 @@
             var label = value.permanent
                 ? Craft.t('link-audit', 'Permanent')
                 : Craft.t('link-audit', 'Temporary');
-            var copyNewLabel = Craft.escapeHtml(Craft.t('link-audit', 'Copy the new address'));
+            var copyNewLabel = escAttr(Craft.t('link-audit', 'Copy the new address'));
 
             // The screen's own advice is to put this address into the content,
             // so the column hands it over ready to paste.
             return '<span class="link-audit-cell">'
                 + '<span class="status ' + (value.permanent ? 'blue' : 'light') + '"></span>'
-                + '<span title="' + Craft.escapeHtml(value.finalUrl) + '">'
+                + '<span title="' + escAttr(value.finalUrl) + '">'
                 + Craft.escapeHtml(truncate(value.finalUrl)) + '</span>'
                 + '<button type="button" class="btn small" data-icon="clipboard"'
-                + ' data-link-audit-copy="' + Craft.escapeHtml(value.finalUrl) + '"'
+                + ' data-link-audit-copy="' + escAttr(value.finalUrl) + '"'
                 + ' title="' + copyNewLabel + '" aria-label="' + copyNewLabel + '"></button>'
                 + '<span class="light">(' + Craft.escapeHtml(label) + ')</span></span>';
         }
@@ -274,7 +300,15 @@
                 titleClass: 'centeralign',
                 dataClass: 'centeralign',
             },
-            { name: 'host', title: Craft.t('link-audit', 'Host'), sortField: true },
+            // Hidden on a narrow screen: the URL itself carries the host, and
+            // the room is better spent on the address and the buttons.
+            {
+                name: 'host',
+                title: Craft.t('link-audit', 'Host'),
+                sortField: true,
+                titleClass: 'la-col-sm-hide',
+                dataClass: 'la-col-sm-hide',
+            },
         ];
 
         if (isRedirects) {
@@ -289,7 +323,13 @@
                 titleClass: 'rightalign',
                 dataClass: 'rightalign',
             },
-            { name: 'checked', title: Craft.t('link-audit', 'Last Checked'), sortField: true }
+            {
+                name: 'checked',
+                title: Craft.t('link-audit', 'Last Checked'),
+                sortField: true,
+                titleClass: 'la-col-sm-hide',
+                dataClass: 'la-col-sm-hide',
+            }
         );
 
         if (canAct) {

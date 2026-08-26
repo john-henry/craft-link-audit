@@ -446,7 +446,7 @@ describe('The list screens', function() {
 
         $this->get('admin/link-audit/broken')
             ->assertOk()
-            ->assertSee('Each one is a link somebody clicks and lands nowhere');
+            ->assertSee('Anybody clicking one of them lands nowhere');
     });
 
     it('renders the redirects list', function() {
@@ -468,7 +468,7 @@ describe('The list screens', function() {
 
         $this->get('admin/link-audit/blocked')
             ->assertOk()
-            ->assertSee('These are not broken');
+            ->assertSee('None of these is necessarily broken');
     });
 
     it('gives the unreachable ones a screen of their own', function() {

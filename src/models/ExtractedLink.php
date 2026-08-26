@@ -227,7 +227,12 @@ class ExtractedLink
             'fieldHandle' => $this->fieldHandle,
             'source' => $this->source,
             'linkText' => $this->linkText,
-            'rawHref' => $this->rawHref,
+            // Clamped to the column width. A reference insert runs as one
+            // batch inside a transaction, outside the per-link guard, so a
+            // single over-long href, a giant tracking or maps URL, would throw
+            // Data too long on strict MySQL and take the whole batch down with
+            // it, again on every rescan.
+            'rawHref' => mb_substr($this->rawHref, 0, 500),
             'scanId' => $scanId,
         ];
     }

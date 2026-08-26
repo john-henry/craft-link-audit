@@ -50,6 +50,13 @@ class UrlsController extends BaseController
     public const PER_PAGE = 50;
 
     /**
+     * @var int The largest page a caller may ask the table endpoint for, so a
+     * request cannot demand a million rows each carrying the reference-count
+     * subquery.
+     */
+    private const _MAX_PER_PAGE = 200;
+
+    /**
      * @var string Matches the documentation link a cURL failure carries on the
      * end of it, whichever of the two hosts libcurl's own text is using.
      */
@@ -183,10 +190,15 @@ class UrlsController extends BaseController
         $site = $this->requestedSite();
         $rows = LinkAudit::$plugin->getIgnoreService()->ignoredUrls(siteIds: $this->allowedSiteIds());
 
+        $report = LinkAudit::$plugin->getReportService();
+
         foreach ($rows as $i => $row) {
             $rows[$i]['dateIgnored'] = $this->_toDate($row['dateIgnored']);
             $rows[$i]['detailUrl'] = $row['url'] !== null
                 ? UrlHelper::cpUrl('link-audit/url', ['hash' => (string)$row['urlHash']])
+                : null;
+            $rows[$i]['label'] = $row['url'] !== null
+                ? $report->urlLabel((string)$row['url'], (int)$site->id)
                 : null;
         }
 
@@ -230,6 +242,45 @@ class UrlsController extends BaseController
     }
 
     /**
+     * Where one reference sits on its page, for the edit screen to scroll to.
+     *
+     * Answers the `#la-ref-<id>` fragment a precise Edit link carries. The
+     * base controller has already asked for the reports permission; what is
+     * asked here on top is the site fence, the same one every other read
+     * applies: a reference on a site this reader may not edit is answered
+     * with a 404 rather than a description of somebody else's content.
+     *
+     * @return Response The location, as JSON.
+     * @throws BadRequestHttpException If the request does not accept JSON, or
+     *                                the id is missing.
+     * @throws ForbiddenHttpException If the user may not read the reports.
+     * @throws InvalidConfigException If a service cannot be resolved.
+     * @throws NotFoundHttpException If no such reference exists, or it sits on
+     *                               a site the reader may not edit.
+     * @author John Henry Donovan
+     * @since 1.0.0
+     */
+    public function actionReferenceLocation(): Response
+    {
+        $this->requireAcceptsJson();
+
+        $referenceId = (int)$this->request->getRequiredParam('id');
+        $location = LinkAudit::$plugin->getReportService()->referenceLocation($referenceId);
+
+        if ($location === null || !in_array($location['siteId'], $this->allowedSiteIds(), true)) {
+            throw new NotFoundHttpException(Craft::t('link-audit', 'No such reference.'));
+        }
+
+        return $this->asJson([
+            'success' => true,
+            'blockId' => $location['blockId'],
+            'fieldHandle' => $location['fieldHandle'],
+            'rawHref' => $location['rawHref'],
+            'linkText' => $location['linkText'],
+        ]);
+    }
+
+    /**
      * A page of rows for whichever list is asking.
      *
      * @return Response The rows, as JSON.
@@ -247,7 +298,10 @@ class UrlsController extends BaseController
         $status = UrlStatus::tryFrom((string)$this->request->getParam('verdict', '')) ?? UrlStatus::Broken;
         $siteId = $this->resolveSiteId($this->request->getParam('siteId'));
         $page = max(1, (int)$this->request->getParam('page', 1));
-        $perPage = max(1, (int)$this->request->getParam('per_page', self::PER_PAGE));
+        // Capped as well as floored: the sort can be the correlated reference
+        // count, so an uncapped page size is an invitation to ask for a
+        // million rows each carrying that subquery.
+        $perPage = min(self::_MAX_PER_PAGE, max(1, (int)$this->request->getParam('per_page', self::PER_PAGE)));
 
         $filters = $this->reportFilters();
         $filters['search'] = trim((string)($this->request->getParam('search') ?? ''));

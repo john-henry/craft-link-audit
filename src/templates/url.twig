@@ -67,6 +67,13 @@
         .link-audit-meta > details { border-block-start: 1px solid var(--border-hairline); padding: var(--s) var(--m); }
         .link-audit-meta > details > summary { cursor: pointer; }
         .link-audit-meta > details > p { margin-block: var(--s) 0; }
+        .link-audit-ignore-form { min-width: 0; flex-wrap: wrap; }
+        .link-audit-ignore-form input.text { max-width: 100%; }
+        @media (max-width: 672px) {
+            .link-audit-ignore-form { flex: 1 1 100%; }
+            .link-audit-ignore-form input.text { width: 100%; flex: 1 1 100%; }
+            .link-audit-ignore-form .btn { width: 100%; justify-content: center; }
+        }
         {% endcss %}
         <div class="meta read-only link-audit-meta" style="margin-top:14px;border-radius:var(--large-border-radius)">
             {% if url.reason %}
@@ -186,7 +193,7 @@
                     {% endif %}
 
                     {% if canManageIgnores %}
-                        <form method="post" accept-charset="UTF-8" class="flex" style="align-items:center;gap:8px">
+                        <form method="post" accept-charset="UTF-8" class="flex link-audit-ignore-form" style="align-items:center;gap:8px">
                             {{ csrfInput() }}
                             {{ actionInput('link-audit/url-actions/ignore') }}
                             {{ redirectInput(returnUrl) }}
@@ -225,6 +232,11 @@
                 </p>
             {% endif %}
 
+            {% css %}
+            .link-audit-refs-scroll { overflow-x: auto; }
+            .link-audit-refs-scroll > table { min-width: 560px; }
+            {% endcss %}
+            <div class="link-audit-refs-scroll">
             <table class="data fullwidth">
                 <thead>
                     <tr>
@@ -270,6 +282,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
         {% endif %}
     </div>
 

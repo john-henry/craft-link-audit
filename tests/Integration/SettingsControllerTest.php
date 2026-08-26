@@ -62,6 +62,15 @@ beforeEach(function() {
     // over and over, and none of that belongs in the repository.
     Craft::$app->getProjectConfig()->writeYamlAutomatically = false;
 
+    // These test the save path, which needs admin changes allowed. Both flags
+    // are forced on here so the suite passes whatever CRAFT_ALLOW_ADMIN_CHANGES
+    // the environment carries, since a developer often runs the tests on an
+    // install pinned read-only to try the read-only screens: the general
+    // config gate, and the project config service, which the env puts into
+    // read-only at boot and a save would otherwise be refused by.
+    Craft::$app->getConfig()->getGeneral()->allowAdminChanges = true;
+    Craft::$app->getProjectConfig()->readOnly = false;
+
     $this->actingAs(UserFactory::factory()->admin(true)->create());
 });
 
@@ -124,6 +133,27 @@ describe('Saving one tab', function() {
         expect($stored['concurrency'])->toBe(25)
             ->and($stored['timeout'])->toBe(30)
             ->and($stored['verifySsl'])->toBeFalse();
+    });
+
+    it('keeps the stored number when a box is cleared, and takes a deliberate zero', function() {
+        settingsWrite(['okTtlDays' => 30]);
+
+        // Backspacing a value out and saving is an accident, not a request
+        // for zero: zero here means recheck every working link on every scan.
+        $this->post('actions/link-audit/settings/save-caching', [
+            'settings' => ['okTtlDays' => ''],
+            'redirect' => settingsRedirect('caching'),
+        ])->assertRedirect();
+
+        expect(settingsStored()['okTtlDays'])->toBe(30);
+
+        // A typed zero is a decision, and it lands.
+        $this->post('actions/link-audit/settings/save-caching', [
+            'settings' => ['okTtlDays' => '0'],
+            'redirect' => settingsRedirect('caching'),
+        ])->assertRedirect();
+
+        expect(settingsStored()['okTtlDays'])->toBe(0);
     });
 
     it('takes the crawl settings back off the scanning tab', function() {

@@ -12,9 +12,9 @@
 .link-audit-panel__row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 14px 18px; border-block-end: 1px solid var(--border-hairline); }
 .link-audit-panel__row > dt { margin: 0; }
 .link-audit-panel__row > dd { margin: 0; text-align: end; }
-.link-audit-panel__hint { margin-block: 8px 0; font-size: 12px; }
-.link-audit-panel__urls { margin-block-start: 6px; }
-.link-audit-panel__url { margin-block-end: 4px; word-break: break-all; }
+.link-audit-panel__hint { margin: 0 -18px; padding: 8px 18px; font-size: 12px; }
+.link-audit-panel__urls { margin: 0 -18px; }
+.link-audit-panel__url { padding: 10px 18px; border-block-start: 1px solid var(--border-hairline); word-break: break-all; }
 .link-audit-panel__actions { padding: 12px 18px 0; }
 .link-audit-panel__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 18px; }
 {% endcss %}
@@ -119,22 +119,6 @@ window.LinkAuditBlockHash = window.location.hash;
 (function() {
     'use strict';
 
-    // The report's Edit links name where a link sits with a fragment of the
-    // plugin's own: #la-field-<handle> for a top-level field, and
-    // #la-block-<id>--<matrixFieldHandle> for a link inside a Matrix block,
-    // because Craft gives a block a data-id and no id a fragment could reach.
-    // A block being edited through a draft carries a different id than the
-    // canonical one the scan recorded, so when no block matches, the Matrix
-    // field named after the double dash is scrolled to instead.
-    var hash = window.LinkAuditBlockHash || window.location.hash;
-    var match = hash.match(/^#la-(?:block-(\d+)(?:--([a-zA-Z0-9_]+))?|field-([a-zA-Z0-9_]+))$/);
-
-    if (!match) {
-        return;
-    }
-
-    var attempts = 0;
-
     // A field on another tab is in the DOM but hidden inside its pane. The
     // pane carries no marker of its own; what ties it to its tab is the tab
     // anchor's aria-controls naming the pane's id. So the walk goes up from
@@ -160,7 +144,7 @@ window.LinkAuditBlockHash = window.location.hash;
         }
     }
 
-    function highlight(target) {
+    function flash(target) {
         revealTab(target);
         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
         target.style.outline = '3px solid #e0326e';
@@ -180,71 +164,8 @@ window.LinkAuditBlockHash = window.location.hash;
         return handle ? document.getElementById('fields-' + handle + '-field') : null;
     }
 
-    function attempt() {
-        var target = match[1]
-            ? document.querySelector('.matrixblock[data-id="' + match[1] + '"]')
-            : fieldTarget(match[3]);
-
-        if (target) {
-            highlight(target);
-
-            return;
-        }
-
-        attempts++;
-
-        // The editor may still be laying out, so the target gets a few
-        // seconds to turn up before the block's field fallback is taken.
-        if (attempts < 8) {
-            window.setTimeout(attempt, 250);
-
-            return;
-        }
-
-        var fallback = fieldTarget(match[2]);
-
-        if (fallback) {
-            highlight(fallback);
-        }
-    }
-
-    window.setTimeout(attempt, 250);
-})();
-
-(function() {
-    'use strict';
-
-    function flash(target) {
-        var node = target.parentElement;
-
-        while (node && node !== document.body) {
-            if (node.id) {
-                var tab = document.querySelector('a[role="tab"][aria-controls="' + node.id + '"]');
-
-                if (tab) {
-                    if (tab.getAttribute('aria-selected') !== 'true') {
-                        tab.click();
-                    }
-
-                    break;
-                }
-            }
-
-            node = node.parentElement;
-        }
-
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        target.style.outline = '3px solid #e0326e';
-        target.style.outlineOffset = '3px';
-        target.style.boxShadow = '0 0 0 6px rgba(224, 50, 110, 0.15)';
-        target.style.borderRadius = 'var(--large-border-radius, 5px)';
-
-        window.setTimeout(function() {
-            target.style.outline = '';
-            target.style.outlineOffset = '';
-            target.style.boxShadow = '';
-            target.style.borderRadius = '';
-        }, 3000);
+    function blockTarget(id) {
+        return id ? document.querySelector('.matrixblock[data-id="' + id + '"]') : null;
     }
 
     // A big rich text field is a poor answer to "where is it?", so the anchor
@@ -275,6 +196,74 @@ window.LinkAuditBlockHash = window.location.hash;
         return null;
     }
 
+    // Seeks the spot with a few seconds of patience for the editor to finish
+    // laying out: the named block first, its field when the block cannot be
+    // found on this page (a draft rebuilding block ids, for instance), and the
+    // exact anchor inside whichever container turns up.
+    function seek(blockId, fieldHandle, rawHref, linkText) {
+        var attempts = 0;
+
+        function attempt() {
+            var container = blockId ? blockTarget(blockId) : fieldTarget(fieldHandle);
+
+            if (container) {
+                flash(anchorWithin(container, rawHref, linkText) || container);
+
+                return;
+            }
+
+            attempts++;
+
+            if (attempts < 8) {
+                window.setTimeout(attempt, 250);
+
+                return;
+            }
+
+            if (blockId && fieldHandle) {
+                var fallback = fieldTarget(fieldHandle);
+
+                if (fallback) {
+                    flash(anchorWithin(fallback, rawHref, linkText) || fallback);
+                }
+            }
+        }
+
+        window.setTimeout(attempt, 250);
+    }
+
+    // The report's Edit links name where a link sits with a fragment of the
+    // plugin's own: #la-ref-<id> names the reference row itself, and the
+    // server answers with the block, the field, the raw href and the link
+    // text, so the landing is on the very anchor. #la-field-<handle> and
+    // #la-block-<id>--<matrixFieldHandle> are the plainer forms that need no
+    // request, carried by the CSV where the reader may not be signed in.
+    var hash = window.LinkAuditBlockHash || window.location.hash;
+    var match = hash.match(/^#la-(?:ref-(\d+)|block-(\d+)(?:--([a-zA-Z0-9_]+))?|field-([a-zA-Z0-9_]+))$/);
+
+    if (match) {
+        if (match[1]) {
+            var endpoint = '{{ actionUrl('link-audit/urls/reference-location')|e('js') }}';
+            endpoint += (endpoint.indexOf('?') === -1 ? '?' : '&') + 'id=' + match[1];
+
+            fetch(endpoint, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            }).then(function(response) {
+                return response.ok ? response.json() : null;
+            }).then(function(data) {
+                if (data && data.success) {
+                    seek(data.blockId, data.fieldHandle, data.rawHref, data.linkText);
+                }
+            }).catch(function() {
+                // A location that cannot be fetched is a scroll that does not
+                // happen, and the page is still the right page.
+            });
+        } else {
+            seek(match[2] || null, match[2] ? match[3] : match[4], null, null);
+        }
+    }
+
     // The broken addresses in the panel sit beside the very fields carrying
     // them, so a click shows the spot rather than leaving the page. The href
     // still points at the report page: when nothing on this page can be found
@@ -282,17 +271,8 @@ window.LinkAuditBlockHash = window.location.hash;
     // to fall back on, the ordinary navigation goes ahead instead.
     document.querySelectorAll('.link-audit-panel__url > a[data-la-block], .link-audit-panel__url > a[data-la-field]').forEach(function(link) {
         link.addEventListener('click', function(event) {
-            var container = null;
-            var blockId = link.getAttribute('data-la-block');
-            var fieldHandle = link.getAttribute('data-la-field');
-
-            if (blockId) {
-                container = document.querySelector('.matrixblock[data-id="' + blockId + '"]');
-            }
-
-            if (!container && fieldHandle) {
-                container = document.getElementById('fields-' + fieldHandle + '-field');
-            }
+            var container = blockTarget(link.getAttribute('data-la-block'))
+                || fieldTarget(link.getAttribute('data-la-field'));
 
             if (!container) {
                 return;

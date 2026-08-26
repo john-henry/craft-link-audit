@@ -1384,6 +1384,15 @@ class ScanService extends Component
     {
         Craft::info("Scan {$scan['id']} finished.", 'link-audit');
 
+        // A single-element read is not a moment to mail the content team: it is
+        // one page re-read from the edit screen or a console command, not a
+        // sweep of the site. The scans that broadcast are the ones that looked
+        // at more than one thing, full, incremental and the check phases the
+        // console runs.
+        if (ScanMode::tryFrom((string)$scan['mode']) === ScanMode::Single) {
+            return;
+        }
+
         try {
             LinkAudit::$plugin->getNotificationService()->notifyScanComplete($scan);
         } catch (Throwable $e) {

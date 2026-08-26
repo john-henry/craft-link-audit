@@ -4,15 +4,14 @@
 
 {% block settingsFields %}
     <div class="readable">
-        <blockquote class="note">
+        <blockquote class="note tip">
             <p>
                 {{ 'The way to run this on a schedule is cron. It runs when you say it runs, it leaves a log, and it does not depend on anybody visiting the site. A nightly incremental scan reads only what has changed since the last one, and the checking is incremental for free, because a verdict is only asked again once it has gone stale.'|t('link-audit') }}
             </p>
-            <pre><code># Every night at two
-0 2 * * * cd /path/to/site && php craft link-audit/scan/incremental
-
-# And the whole lot on a Sunday
-0 3 * * 0 cd /path/to/site && php craft link-audit/scan/all</code></pre>
+            <p><strong>{{ 'Every night at two'|t('link-audit') }}</strong></p>
+            <pre><code>0 2 * * * cd /path/to/site && php craft link-audit/scan/incremental</code></pre>
+            <p><strong>{{ 'And the whole lot on a Sunday'|t('link-audit') }}</strong></p>
+            <pre><code>0 3 * * 0 cd /path/to/site && php craft link-audit/scan/all</code></pre>
         </blockquote>
     </div>
 
@@ -20,7 +19,8 @@
 
     {{ forms.lightswitchField({
         label: 'Scheduled Scans'|t('link-audit'),
-        instructions: 'A fallback for installs with no cron. It rides on Craft\'s garbage collection, which runs when it runs, so treat it as a backstop rather than a schedule you can plan around. The cron entry above is the one to use if you have the choice.'|t('link-audit'),
+        instructions: 'A fallback for installs with no cron.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'It rides on Craft\'s garbage collection, which runs when it runs, so treat it as a backstop rather than a schedule you can plan around. The cron entry above is the one to use if you have the choice.'|t('link-audit') ~ '</span>',
         id: 'scheduledScanEnabled',
         name: 'settings[scheduledScanEnabled]',
         on: settings.scheduledScanEnabled,
@@ -31,7 +31,8 @@
 
     {{ forms.textField({
         label: 'Scan Every (hours)'|t('link-audit'),
-        instructions: 'How long has to have passed since the last full or incremental scan started before the fallback queues another one. Counted from the start rather than the finish, so a long scan cannot have a second one queued on top of it, and nothing is queued at all while one is still running.'|t('link-audit'),
+        instructions: 'How long has to have passed since the last full or incremental scan started before the fallback queues another one.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Counted from the start rather than the finish, so a long scan cannot have a second one queued on top of it, and nothing is queued at all while one is still running.'|t('link-audit') ~ '</span>',
         id: 'scheduledScanIntervalHours',
         name: 'settings[scheduledScanIntervalHours]',
         value: settings.scheduledScanIntervalHours,
