@@ -1,6 +1,8 @@
 [![Stable Version](https://img.shields.io/packagist/v/johnhenry/craft-link-audit?label=stable&style=for-the-badge)](https://packagist.org/packages/johnhenry/craft-link-audit)
 [![Static Badge](https://img.shields.io/badge/free-plugin?style=for-the-badge&logo=craftcms&logoColor=white&logoSize=auto&label=Craft%20Plugin%20Store&labelColor=%23E5422B)](https://plugins.craftcms.com/link-audit?craft5)
 
+![Link Audit](https://johnhenry.ie/images/plugins/promos/link-audit/1.png)
+
 
 # Link Audit for Craft CMS
 
