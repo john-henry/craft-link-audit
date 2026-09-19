@@ -7,6 +7,7 @@
 namespace johnhenry\linkaudit\helpers;
 
 use Craft;
+use johnhenry\ipguard\Dns;
 use johnhenry\ipguard\IpRange;
 use johnhenry\linkaudit\exceptions\UnsafeUrlException;
 use Psr\Http\Message\RequestInterface;
@@ -230,35 +231,6 @@ class UrlSafety
     // =========================================================================
     // Private Methods
     // =========================================================================
-
-    /**
-     * The DNS records of one type for a host, or an empty list when the lookup
-     * fails.
-     *
-     * A host that does not resolve is an ordinary answer here, not a fault, and
-     * `dns_get_record()` raises a warning as well as returning false when it
-     * cannot get one. The handler is put up for the length of the call only and
-     * taken down in a `finally`, so nothing else in the process loses its own
-     * error reporting to it.
-     *
-     * @param string $host The hostname to look up.
-     * @param int $type The `DNS_*` record type.
-     * @return array<int, array<string, mixed>> The records.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private static function _dnsRecords(string $host, int $type): array
-    {
-        set_error_handler(static fn(): bool => true);
-
-        try {
-            $records = dns_get_record($host, $type);
-        } finally {
-            restore_error_handler();
-        }
-
-        return is_array($records) ? $records : [];
-    }
     /**
      * Whether the host is one this install serves.
      *
@@ -300,32 +272,7 @@ class UrlSafety
             return self::$_resolved[$host];
         }
 
-        $ips = [];
-
-        // IPv4 (A records).
-        foreach (self::_dnsRecords($host, DNS_A) as $record) {
-            if (!empty($record['ip'])) {
-                $ips[] = $record['ip'];
-            }
-        }
-
-        // IPv6 (AAAA records).
-        foreach (self::_dnsRecords($host, DNS_AAAA) as $record) {
-            if (!empty($record['ipv6'])) {
-                $ips[] = $record['ipv6'];
-            }
-        }
-
-        // Fallback to gethostbyname when DNS records are unavailable.
-        if ($ips === []) {
-            $resolved = gethostbyname($host);
-
-            if ($resolved !== $host && filter_var($resolved, FILTER_VALIDATE_IP)) {
-                $ips[] = $resolved;
-            }
-        }
-
-        $ips = array_values(array_unique($ips));
+        $ips = Dns::addressesFor($host);
 
         // Only a successful resolution is worth remembering. A failure is often
         // a blip, and caching it would hold every link on that host broken for

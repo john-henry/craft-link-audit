@@ -23,7 +23,7 @@
   "homepage": "https://johnhenry.ie/plugins/link-audit/",
   "require": {
     "craftcms/cms": "^5.6",
-    "johnhenry/craft-ip-guard": "^1.0",
+    "johnhenry/craft-ip-guard": "^1.1",
     "php": "^8.2 || ^8.3 || ^8.4"
   },
   "require-dev": {
