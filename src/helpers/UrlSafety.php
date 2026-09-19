@@ -7,6 +7,7 @@
 namespace johnhenry\linkaudit\helpers;
 
 use Craft;
+use johnhenry\ipguard\IpRange;
 use johnhenry\linkaudit\exceptions\UnsafeUrlException;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -191,29 +192,7 @@ class UrlSafety
      */
     public static function isPrivateIp(string $ip): bool
     {
-        // Unwrap IPv4-mapped IPv6 addresses (e.g. ::ffff:169.254.169.254) so
-        // the private-range check below applies to the embedded IPv4 address.
-        if (stripos($ip, '::ffff:') === 0) {
-            $mapped = substr($ip, 7);
-
-            if (filter_var($mapped, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-                $ip = $mapped;
-            }
-        }
-
-        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-            // Not a parseable IP, treat as unsafe.
-            return true;
-        }
-
-        // PHP's own reserved/private range filter covers the common cases for
-        // both IPv4 and IPv6 (RFC 1918, loopback, link-local, unique-local).
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-            return true;
-        }
-
-        // Belt-and-braces explicit ranges that some PHP builds miss.
-        return self::_isInReservedRange($ip);
+        return IpRange::isPrivate($ip);
     }
 
     /**
@@ -280,63 +259,6 @@ class UrlSafety
 
         return is_array($records) ? $records : [];
     }
-
-    /**
-     * Explicit range checks for addresses some PHP filter builds do not flag.
-     *
-     * @param string $ip The IP address to test.
-     * @return bool Whether the address is in a reserved range.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private static function _isInReservedRange(string $ip): bool
-    {
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            $long = ip2long($ip);
-
-            if ($long === false) {
-                return true;
-            }
-
-            $reserved = [
-                ['10.0.0.0', 8],
-                ['172.16.0.0', 12],
-                ['192.168.0.0', 16],
-                ['127.0.0.0', 8],
-                ['169.254.0.0', 16],
-                ['0.0.0.0', 8],
-                ['100.64.0.0', 10],
-                ['192.0.0.0', 24],
-                ['198.18.0.0', 15],
-                ['192.0.2.0', 24],
-                ['240.0.0.0', 4],
-            ];
-
-            foreach ($reserved as [$subnet, $mask]) {
-                $subnetLong = ip2long($subnet);
-                $maskLong = -1 << (32 - $mask);
-
-                if (($long & $maskLong) === ($subnetLong & $maskLong)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        // IPv6 loopback / unspecified / unique-local / link-local.
-        $normalised = strtolower($ip);
-
-        return $normalised === '::1'
-            || $normalised === '::'
-            || str_starts_with($normalised, 'fc')
-            || str_starts_with($normalised, 'fd')
-            || str_starts_with($normalised, 'fe8')
-            || str_starts_with($normalised, 'fe9')
-            || str_starts_with($normalised, 'fea')
-            || str_starts_with($normalised, 'feb');
-    }
-
     /**
      * Whether the host is one this install serves.
      *
@@ -351,21 +273,7 @@ class UrlSafety
      */
     private static function _isOwnSiteHost(string $host): bool
     {
-        $host = strtolower(trim($host));
-
-        if ($host === '') {
-            return false;
-        }
-
-        foreach (Craft::$app->getSites()->getAllSites() as $site) {
-            $siteHost = parse_url((string)$site->getBaseUrl(), PHP_URL_HOST);
-
-            if (is_string($siteHost) && strtolower($siteHost) === $host) {
-                return true;
-            }
-        }
-
-        return false;
+        return IpRange::isOwnSiteHost($host);
     }
 
     /**

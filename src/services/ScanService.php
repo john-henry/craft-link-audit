@@ -733,7 +733,7 @@ class ScanService extends Component
 
             $rowSiteId = $row['siteId'] ?? '';
 
-            if ($rowSiteId !== '' && $rowSiteId !== null && (int)$rowSiteId !== $siteId) {
+            if ($rowSiteId !== '' && (int)$rowSiteId !== $siteId) {
                 continue;
             }
 

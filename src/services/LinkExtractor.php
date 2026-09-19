@@ -670,7 +670,7 @@ class LinkExtractor extends Component
 
             if ($link instanceof HyperElementLink) {
                 $target = $link->getElement(null);
-                $targetElementId = $target?->id ?? $this->_hyperElementId($link);
+                $targetElementId = $target->id ?? $this->_hyperElementId($link);
 
                 if ($targetElementId === null) {
                     continue;
@@ -936,7 +936,7 @@ class LinkExtractor extends Component
         }
 
         $target = $query->one();
-        $targetElementId = $target?->id ?? $this->_linkDataElementId($value);
+        $targetElementId = $target->id ?? $this->_linkDataElementId($value);
 
         if ($targetElementId === null) {
             return [];
@@ -1338,7 +1338,7 @@ class LinkExtractor extends Component
             return (int)$site;
         }
 
-        return Craft::$app->getSites()->getSiteByHandle($site)?->id ?? $element->getSite()->id;
+        return Craft::$app->getSites()->getSiteByHandle($site)->id ?? $element->getSite()->id;
     }
 
     /**

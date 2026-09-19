@@ -145,7 +145,7 @@ class ScansController extends BaseController
             'success' => true,
             'scan' => [
                 'id' => (int)$scan['id'],
-                'status' => $status?->value ?? (string)$scan['status'],
+                'status' => $status->value ?? (string)$scan['status'],
                 'statusLabel' => $status?->label() ?? (string)$scan['status'],
                 'mode' => (string)$scan['mode'],
                 'elementsScanned' => (int)$scan['elementsScanned'],

@@ -22,13 +22,15 @@
   ],
   "homepage": "https://johnhenry.ie/plugins/link-audit/",
   "require": {
-    "php": "^8.2 || ^8.3 || ^8.4",
-    "craftcms/cms": "^5.6"
+    "craftcms/cms": "^5.6",
+    "johnhenry/craft-ip-guard": "^1.0",
+    "php": "^8.2 || ^8.3 || ^8.4"
   },
   "require-dev": {
     "craftcms/ecs": "dev-main",
     "craftcms/html-field": "^1.0 || ^2.0 || ^3.0",
     "craftcms/phpstan": "dev-main",
+    "phpstan/phpstan": "^2.2",
     "verbb/hyper": "^2.0 || ^3.0",
     "verbb/navigation": "^3.0"
   },

@@ -643,6 +643,6 @@ class SettingsModel extends Model
      */
     private function _pluginVersion(): string
     {
-        return LinkAudit::getInstance()?->version ?? '1.0';
+        return LinkAudit::getInstance()->version ?? '1.0';
     }
 }

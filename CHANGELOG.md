@@ -1,5 +1,13 @@
 # Release Notes for Link Audit
 
+## Unreleased
+
+### Changed
+- The check that stops a scan fetching a private or internal address now comes out of a small shared
+  package, `johnhenry/craft-ip-guard`, which Accessibility Audit reads from as well. What counts as
+  private has not changed. It sits on its own so a range added to the list is added for both plugins
+  at once, a gap in only one of them being the whole risk. Composer pulls it in on update.
+
 ## 1.0.0-beta.7 - 2026-08-26
 
 ### Security
