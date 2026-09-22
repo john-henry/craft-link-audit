@@ -9,9 +9,11 @@ namespace johnhenry\linkaudit\widgets;
 use Craft;
 use craft\base\Widget;
 use craft\models\Site;
+use craft\web\View;
 use johnhenry\linkaudit\controllers\BaseController;
 use johnhenry\linkaudit\LinkAudit;
 use Throwable;
+use yii\base\InvalidConfigException;
 
 /**
  * A dashboard tile saying how many links are broken and when they were last
@@ -25,8 +27,9 @@ use Throwable;
  * Deliberately three numbers and a link, not a list. A broken URL means nothing
  * without knowing what points at it, and that is the report's job.
  *
+ * @property-read null|string $settingsHtml
  * @property-read string|null $bodyHtml
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class BrokenLinksWidget extends Widget
@@ -44,7 +47,7 @@ class BrokenLinksWidget extends Widget
      * Overview reads one site, the widget would read them all. Scoping the
      * widget to a site makes the two screens tell the same story.
      *
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public ?int $siteId = null;
@@ -57,7 +60,7 @@ class BrokenLinksWidget extends Widget
      * @inheritdoc
      *
      * @return string The name shown in the widget picker.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function displayName(): string
@@ -74,7 +77,7 @@ class BrokenLinksWidget extends Widget
      * full-colour artwork does not survive that.
      *
      * @return string|null The path to the icon.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function icon(): ?string
@@ -90,7 +93,7 @@ class BrokenLinksWidget extends Widget
      * instance at a time) is worth keeping on top of the permission.
      *
      * @return bool Whether this user may add the widget.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function isSelectable(): bool
@@ -106,7 +109,7 @@ class BrokenLinksWidget extends Widget
      * @inheritdoc
      *
      * @return int|null The widest the widget may be.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function maxColspan(): ?int
@@ -128,8 +131,9 @@ class BrokenLinksWidget extends Widget
      *
      * @return string|null The widget body, or null when it has nothing it is
      *                     allowed to say.
-     * @author John Henry Donovan
+     * @throws InvalidConfigException
      * @since 1.0.0
+     * @author John Henry Donovan <info@johnhenry.ie>
      */
     public function getBodyHtml(): ?string
     {
@@ -137,33 +141,46 @@ class BrokenLinksWidget extends Widget
             return null;
         }
 
-        $editableSites = array_values(Craft::$app->getSites()->getEditableSites());
-        $scopedSite = $this->_scopedSite($editableSites);
-
-        $siteIds = $scopedSite !== null
-            ? [(int)$scopedSite->id]
-            : array_map(static fn(Site $site): int => (int)$site->id, $editableSites);
-
-        $reports = LinkAudit::$plugin->getReportService();
-
-        // A dashboard is a page full of other people's widgets. One of them
-        // throwing should not be the reason nobody can see any of them.
+        // A dashboard is a page full of other people's widgets, and Craft asks
+        // for this without a catch of its own, so anything thrown here is the
+        // whole dashboard refusing to draw for everybody who has this tile.
+        //
+        // The render is inside as well as the reading. A template is the more
+        // likely of the two to throw: a deploy that half-landed, a Twig error,
+        // an upgrade that moved something out from under it.
         try {
+            $editableSites = array_values(Craft::$app->getSites()->getEditableSites());
+            $scopedSite = $this->_scopedSite($editableSites);
+
+            $siteIds = $scopedSite !== null
+                ? [(int)$scopedSite->id]
+                : array_map(static fn(Site $site): int => (int)$site->id, $editableSites);
+
+            $reports = LinkAudit::$plugin->getReportService();
             $counts = $reports->verdictCountsForSites($siteIds);
             $latestScan = $reports->latestScan();
+
+            // The mode is stated rather than inherited. A widget is drawn by
+            // whoever is drawing the dashboard, and resolving a control-panel
+            // template depends on being in that mode: inherited, a caller in
+            // site mode gets a template that cannot be found, which the catch
+            // below now turns into a blank tile with the reason only in the log.
+            return Craft::$app->getView()->renderTemplate(
+                'link-audit/_widgets/broken-links',
+                [
+                    'broken' => $counts['broken'] ?? 0,
+                    'latestScan' => $latestScan,
+                    'multiSite' => count($editableSites) > 1,
+                    'permanentRedirects' => $counts['permanentRedirect'] ?? 0,
+                    'scopedSite' => $scopedSite,
+                ],
+                View::TEMPLATE_MODE_CP,
+            );
         } catch (Throwable $e) {
             Craft::error('Could not build the broken links widget: ' . $e->getMessage(), 'link-audit');
 
             return null;
         }
-
-        return Craft::$app->getView()->renderTemplate('link-audit/_widgets/broken-links', [
-            'broken' => $counts['broken'] ?? 0,
-            'latestScan' => $latestScan,
-            'multiSite' => count($editableSites) > 1,
-            'permanentRedirects' => $counts['permanentRedirect'] ?? 0,
-            'scopedSite' => $scopedSite,
-        ]);
     }
 
     /**
@@ -174,21 +191,35 @@ class BrokenLinksWidget extends Widget
      *
      * @return string|null The settings form, or null when there is nothing to
      *                     set.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getSettingsHtml(): ?string
     {
-        $editableSites = array_values(Craft::$app->getSites()->getEditableSites());
+        // Craft asks for this straight after the body and without a catch of
+        // its own either, so it is held the same way: a settings pane nobody
+        // can draw is a cog that does not appear, not a dashboard that does
+        // not load.
+        try {
+            $editableSites = array_values(Craft::$app->getSites()->getEditableSites());
 
-        if (count($editableSites) < 2) {
+            if (count($editableSites) < 2) {
+                return null;
+            }
+
+            return Craft::$app->getView()->renderTemplate(
+                'link-audit/_widgets/broken-links-settings',
+                [
+                    'siteId' => $this->siteId,
+                    'sites' => $editableSites,
+                ],
+                View::TEMPLATE_MODE_CP,
+            );
+        } catch (Throwable $e) {
+            Craft::error('Could not build the broken links widget settings: ' . $e->getMessage(), 'link-audit');
+
             return null;
         }
-
-        return Craft::$app->getView()->renderTemplate('link-audit/_widgets/broken-links-settings', [
-            'siteId' => $this->siteId,
-            'sites' => $editableSites,
-        ]);
     }
 
     // =========================================================================
@@ -199,7 +230,7 @@ class BrokenLinksWidget extends Widget
      * @inheritdoc
      *
      * @return array The validation rules.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function defineRules(): array
@@ -224,7 +255,7 @@ class BrokenLinksWidget extends Widget
      *
      * @param Site[] $editableSites The sites this reader may edit.
      * @return Site|null The scoped site, or null to cover them all.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _scopedSite(array $editableSites): ?Site

@@ -32,7 +32,7 @@ use yii\base\Component;
  * Dates go through `DateTimeHelper` throughout: everything here is a row on its
  * way in or out of the database.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class HostState extends Component
@@ -92,7 +92,7 @@ class HostState extends Component
      * @param string $host The host.
      * @return DateTime|null The end of the backoff window, or null when there is
      *                       none.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function blockedUntil(string $host): ?DateTime
@@ -112,7 +112,7 @@ class HostState extends Component
      * Forgets every memoised host row.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function flush(): void
@@ -126,7 +126,7 @@ class HostState extends Component
      *
      * @param string $host The host.
      * @return bool Whether to leave it alone.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isBlocked(string $host): bool
@@ -141,7 +141,7 @@ class HostState extends Component
      *
      * @param string $host The host.
      * @return bool Whether it is bot hostile.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isBotHostile(string $host): bool
@@ -154,7 +154,7 @@ class HostState extends Component
      *
      * @param string $host The host.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function markBotHostile(string $host): void
@@ -172,7 +172,7 @@ class HostState extends Component
      *
      * @param string $host The host.
      * @return int The gap in milliseconds.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function minDelayMs(string $host): int
@@ -192,7 +192,7 @@ class HostState extends Component
      * @param string $host The host.
      * @param int|null $httpStatus The status code, when there was one.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function recordFailure(string $host, ?int $httpStatus = null): void
@@ -231,7 +231,7 @@ class HostState extends Component
      * @param string $host The host.
      * @param int|null $retryAfterSeconds What the host asked for, when it said.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function recordRateLimit(string $host, ?int $retryAfterSeconds = null): void
@@ -262,7 +262,7 @@ class HostState extends Component
      * @param string $host The host.
      * @param int|null $httpStatus The status code, when there was one.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function recordSuccess(string $host, ?int $httpStatus = null): void
@@ -294,7 +294,7 @@ class HostState extends Component
      * @return int|null The gap it gets next, or null once it is back down to
      *                  the configured floor and there is nothing left to
      *                  remember.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _decayed(int $learned): ?int
@@ -311,7 +311,7 @@ class HostState extends Component
      *
      * @param string $host The host.
      * @return array<string, mixed> The state.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _state(string $host): array
@@ -346,7 +346,7 @@ class HostState extends Component
      * @param string $host The host.
      * @param array<string, mixed> $columns The columns to write.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _write(string $host, array $columns): void

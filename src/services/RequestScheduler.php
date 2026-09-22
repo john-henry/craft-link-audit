@@ -44,7 +44,7 @@ use yii\base\Component;
  * job that runs past its time to run, gets released, and makes every one of
  * those requests a second time.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class RequestScheduler extends Component
@@ -112,7 +112,7 @@ class RequestScheduler extends Component
      * The checker this scheduler drives.
      *
      * @return HttpChecker The checker.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getChecker(): HttpChecker
@@ -134,7 +134,7 @@ class RequestScheduler extends Component
      *
      * @param string[] $urls The absolute, normalised URLs to check.
      * @return array<string, Verdict> The verdicts, keyed by URL.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function run(array $urls): array
@@ -311,7 +311,7 @@ class RequestScheduler extends Component
      *
      * @param HttpChecker $checker The checker to use.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function setChecker(HttpChecker $checker): void
@@ -330,7 +330,7 @@ class RequestScheduler extends Component
      *
      * @param int $attempt How many attempts have been made.
      * @return float The delay in seconds.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _backoffSeconds(int $attempt): float
@@ -353,7 +353,7 @@ class RequestScheduler extends Component
      *                                    about that rather than offered again
      *                                    straight away.
      * @return Verdict The deferral.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _deferred(string $reason, ?int $retryAfterSeconds = null): Verdict
@@ -378,7 +378,7 @@ class RequestScheduler extends Component
      * @param array<string, float> $hostNextAllowedAt When each host may be
      *                                                approached again.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _deferWaiting(array &$queues, array &$verdicts, array $hostNextAllowedAt): void
@@ -407,7 +407,7 @@ class RequestScheduler extends Component
      * @param array<int, array<string, mixed>> $tasks The host's queue.
      * @param float $now The current time.
      * @return int|null The index, or null when everything left is still waiting.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _dueTaskIndex(array $tasks, float $now): ?int
@@ -430,7 +430,7 @@ class RequestScheduler extends Component
      *
      * @param Verdict $verdict The verdict.
      * @return bool Whether to try again.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _isRetryable(Verdict $verdict): bool
@@ -455,7 +455,7 @@ class RequestScheduler extends Component
      * @param string $host The host.
      * @param Verdict $verdict The verdict.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _recordOutcome(HostState $hostState, string $host, Verdict $verdict): void
@@ -480,7 +480,7 @@ class RequestScheduler extends Component
      *
      * @param mixed $reason Whatever the promise rejected with.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _rejectionVerdict(mixed $reason): Verdict
@@ -510,7 +510,7 @@ class RequestScheduler extends Component
      * @param int $pending How many of this batch's URLs belong to it.
      * @param float $budget The run's waiting budget, in seconds.
      * @return int|null Roughly how long to leave it, or null to go ahead.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _skipSeconds(HostState $hostState, string $host, int $pending, float $budget): ?int

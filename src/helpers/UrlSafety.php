@@ -37,7 +37,7 @@ use Psr\Http\Message\UriInterface;
  * for the life of the process, because a batch of five hundred links on one
  * domain should cost one DNS lookup, not five hundred.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class UrlSafety
@@ -79,7 +79,7 @@ class UrlSafety
      * @return void
      * @throws UnsafeUrlException If the host resolves to a private or reserved
      *                            address, or cannot be resolved at all.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function assertHostIsPublic(string $host): void
@@ -118,7 +118,7 @@ class UrlSafety
      * @throws UnsafeUrlException If the URL is malformed, uses a disallowed
      *                            scheme, or resolves to a private or reserved
      *                            address.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function assertSafeUrl(string $url): void
@@ -151,7 +151,7 @@ class UrlSafety
      * or queue job never lives long enough to need it.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function flushResolutionCache(): void
@@ -168,7 +168,7 @@ class UrlSafety
      *                             response, which is how the checker knows a
      *                             redirect happened and whether it was permanent.
      * @return array<string, mixed> The client options.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function guzzleRedirectConfig(
@@ -188,7 +188,7 @@ class UrlSafety
      *
      * @param string $ip The IP address to test.
      * @return bool Whether the address is private or reserved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function isPrivateIp(string $ip): bool
@@ -203,7 +203,7 @@ class UrlSafety
      * @param bool $trackRedirects Whether the chain is recorded on the final
      *                             response.
      * @return array<string, mixed> The option value.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function redirectOptions(
@@ -240,7 +240,7 @@ class UrlSafety
      *
      * @param string $host The hostname to test.
      * @return bool Whether the host belongs to this installation.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _isOwnSiteHost(string $host): bool
@@ -255,7 +255,7 @@ class UrlSafety
      *
      * @param string $host The hostname or IP literal to resolve.
      * @return string[] The resolved IP addresses.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _resolveHost(string $host): array

@@ -30,7 +30,7 @@ use Throwable;
  * check phase pushes the finish. Chaining through {@see self::after()} is what
  * keeps each phase inside its own time to run.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ExtractLinks extends BaseBatchedJob
@@ -85,7 +85,7 @@ class ExtractLinks extends BaseBatchedJob
      * last batch has been read.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function after(): void
@@ -101,7 +101,7 @@ class ExtractLinks extends BaseBatchedJob
      * spawns the next batch.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function afterBatch(): void
@@ -118,7 +118,7 @@ class ExtractLinks extends BaseBatchedJob
      * Moves the scan out of the queue and into the extract phase.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function before(): void
@@ -130,7 +130,7 @@ class ExtractLinks extends BaseBatchedJob
      * @inheritdoc
      *
      * @return string|null The description shown in the queue.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function defaultDescription(): ?string
@@ -142,7 +142,7 @@ class ExtractLinks extends BaseBatchedJob
      * @inheritdoc
      *
      * @return Batchable The elements to read.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function loadData(): Batchable
@@ -159,7 +159,7 @@ class ExtractLinks extends BaseBatchedJob
      *
      * @param mixed $item One row from the element query.
      * @throws Throwable If the element's reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function processItem(mixed $item): void
@@ -189,7 +189,7 @@ class ExtractLinks extends BaseBatchedJob
      * The incremental cut-off as a date.
      *
      * @return DateTimeInterface|null The moment, or null for a full read.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _since(): ?DateTimeInterface

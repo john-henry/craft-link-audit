@@ -37,7 +37,7 @@ use yii\web\Response;
  * to one they may, rather than being honoured. Reading the report at all needs
  * `viewReports`, which the base controller has already asked for.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ExportController extends BaseController
@@ -54,7 +54,7 @@ class ExportController extends BaseController
      *                                may not edit any site.
      * @throws InvalidConfigException If a service or the site cannot be
      *                                resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionCsv(): Response
@@ -112,7 +112,7 @@ class ExportController extends BaseController
      * @param int $siteId The site to read references on.
      * @param array<string, mixed> $filters The filters from the request.
      * @return Generator<int, string> The file, in chunks.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _stream(

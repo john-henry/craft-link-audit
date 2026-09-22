@@ -28,11 +28,21 @@ use johnhenry\linkaudit\queue\ChunkedUrlBatcher;
  * and found well last week is not in the pending set at all, so a rescan pays
  * only for what has gone stale.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class CheckUrls extends BaseBatchedJob
 {
+    // =========================================================================
+    // Const Properties
+    // =========================================================================
+
+    /**
+     * @var int Seconds added to the worked-out worst case, for the database
+     * writes and the scan bookkeeping either side of the requests.
+     */
+    private const _TTR_MARGIN_SECONDS = 30;
+
     // =========================================================================
     // Public Properties
     // =========================================================================
@@ -70,6 +80,37 @@ class CheckUrls extends BaseBatchedJob
     public ?int $totalChunks = null;
 
     // =========================================================================
+    // Public Methods
+    // =========================================================================
+
+    /**
+     * @inheritdoc
+     *
+     * States how long this step can take, rather than leaving the queue to
+     * assume its default five minutes.
+     *
+     * A step is a hundred URLs, and what a hundred URLs cost depends entirely
+     * on settings: at one request at a time with a five minute timeout, every
+     * one of them could take as long as the whole default time to run. Craft
+     * hands a job that outlives its time to run to the next worker from the
+     * start, so the step would make all hundred requests again, and again, and
+     * never finish. That is the one thing {@see \johnhenry\linkaudit\services\RequestScheduler} exists to
+     * avoid, and it bounds its own waiting for exactly this reason; nothing was
+     * bounding the requests.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    public function init(): void
+    {
+        // Set before the parent, which only fills it in when it is still null.
+        $this->ttr ??= $this->_worstCaseSeconds();
+
+        parent::init();
+    }
+
+    // =========================================================================
     // Protected Methods
     // =========================================================================
 
@@ -78,7 +119,7 @@ class CheckUrls extends BaseBatchedJob
      * checked.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function after(): void
@@ -102,7 +143,7 @@ class CheckUrls extends BaseBatchedJob
      * {@see self::after()} and the scan goes on to be finished.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function afterBatch(): void
@@ -121,7 +162,7 @@ class CheckUrls extends BaseBatchedJob
      * Moves the scan into the check phase and pins the chunk count.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function before(): void
@@ -135,7 +176,7 @@ class CheckUrls extends BaseBatchedJob
      * @inheritdoc
      *
      * @return string|null The description shown in the queue.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function defaultDescription(): ?string
@@ -147,7 +188,7 @@ class CheckUrls extends BaseBatchedJob
      * @inheritdoc
      *
      * @return Batchable The chunks of URLs to check.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function loadData(): Batchable
@@ -166,7 +207,7 @@ class CheckUrls extends BaseBatchedJob
      * @param mixed $item One chunk of URL rows.
      * @throws Exception If a time to live setting cannot be turned into an
      *                   interval.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function processItem(mixed $item): void
@@ -176,5 +217,35 @@ class CheckUrls extends BaseBatchedJob
         }
 
         LinkAudit::$plugin->getScanService()->checkChunk($item, $this->scanId);
+    }
+
+    // =========================================================================
+    // Private Methods
+    // =========================================================================
+
+    /**
+     * The longest this step could honestly take.
+     *
+     * Every URL in the step timing out, run at whatever concurrency the
+     * settings allow, plus the scheduler's own waiting budget and a margin for
+     * the writes. Never shorter than the queue's own default, so a fast
+     * configuration is not given a tighter deadline than it had before.
+     *
+     * @return int The seconds to reserve.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    private function _worstCaseSeconds(): int
+    {
+        $settings = LinkAudit::$plugin->getSettings();
+
+        $urls = max(1, $this->batchSize) * max(1, $this->chunkSize);
+        $waves = (int)ceil($urls / max(1, $settings->concurrency));
+
+        $seconds = $waves * max(1, $settings->timeout)
+            + (int)ceil(LinkAudit::$plugin->getRequestScheduler()->maxYieldSeconds)
+            + self::_TTR_MARGIN_SECONDS;
+
+        return max($seconds, (int)Craft::$app->getQueue()->ttr);
     }
 }

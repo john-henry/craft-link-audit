@@ -17,7 +17,7 @@ use yii\base\Exception;
  * finding worth showing the author, while a host that does not resolve at all is
  * an ordinary broken link.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class UnsafeUrlException extends Exception
@@ -67,7 +67,7 @@ class UnsafeUrlException extends Exception
      * @param string $reason One of the REASON_* constants.
      * @param int $code The exception code.
      * @param Throwable|null $previous The previous exception, if any.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function __construct(
@@ -85,7 +85,7 @@ class UnsafeUrlException extends Exception
      * @inheritdoc
      *
      * @return string The user-friendly name of this exception.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getName(): string

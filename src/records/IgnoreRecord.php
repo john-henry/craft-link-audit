@@ -22,7 +22,7 @@ use craft\db\ActiveRecord;
  * @property string|null $value
  * @property string|null $note
  * @property int|null $userId
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class IgnoreRecord extends ActiveRecord
@@ -35,7 +35,7 @@ class IgnoreRecord extends ActiveRecord
      * @inheritdoc
      *
      * @return string The table name.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function tableName(): string

@@ -8,6 +8,7 @@ namespace johnhenry\linkaudit\base;
 
 use Craft;
 use craft\base\Element;
+use craft\errors\SiteNotFoundException;
 use craft\events\DefineHtmlEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
@@ -34,6 +35,7 @@ use Psr\Log\LogLevel;
 use Throwable;
 use yii\base\Event;
 use yii\base\InvalidConfigException;
+use yii\base\InvalidRouteException;
 
 /**
  * Wires the plugin's event listeners and lifecycle overrides.
@@ -41,7 +43,7 @@ use yii\base\InvalidConfigException;
  * The main class stays a thin shell: everything Craft has to be told about
  * lives here.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 trait PluginTrait
@@ -77,7 +79,8 @@ trait PluginTrait
      * @return array<string, mixed>|null The nav item, or null when this user has
      *                                   no business in the section.
      * @throws InvalidConfigException If the primary site cannot be resolved.
-     * @author John Henry Donovan
+     * @throws SiteNotFoundException
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getCpNavItem(): ?array
@@ -155,8 +158,9 @@ trait PluginTrait
      * itself static and refuses the saves.
      *
      * @return mixed The redirect.
-     * @author John Henry Donovan
+     * @throws InvalidRouteException
      * @since 1.0.0
+     * @author John Henry Donovan <info@johnhenry.ie>
      */
     public function getReadOnlySettingsResponse(): mixed
     {
@@ -169,7 +173,7 @@ trait PluginTrait
      * Narrows the base return type for callers and static analysis.
      *
      * @return SettingsModel The plugin settings model.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getSettings(): SettingsModel
@@ -184,8 +188,9 @@ trait PluginTrait
      * @inheritdoc
      *
      * @return mixed The redirect to the plugin's own settings screen.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
+     * @throws InvalidRouteException
      */
     public function getSettingsResponse(): mixed
     {
@@ -209,7 +214,7 @@ trait PluginTrait
      * plugin that left a row behind.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function beforeUninstall(): void
@@ -227,7 +232,7 @@ trait PluginTrait
      * @inheritdoc
      *
      * @return SettingsModel The plugin settings model.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function createSettingsModel(): SettingsModel
@@ -259,7 +264,7 @@ trait PluginTrait
      * @param array<string, mixed> $item The nav item, badged in place.
      * @param int|null $siteId The site being read, or null when there is not one.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _addNavBadges(array &$item, ?int $siteId): void
@@ -312,9 +317,17 @@ trait PluginTrait
      * share the answer. What differs between them is only which event Craft
      * raises, which is the registering method's business.
      *
+     * Nothing here is allowed to fail a save, for the same reason nothing in
+     * {@see self::_registerReferenceCleanup()} is allowed to fail a delete. This
+     * runs on EVENT_AFTER_PROPAGATE, inside the save's own transaction, and it
+     * asks an element for its root owner and the queue for a row: an author
+     * should not be told their page could not be saved because a link audit
+     * table would not tidy itself up. A reading that was never queued is picked
+     * up by the next scan.
+     *
      * @param Event $e The element event.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _onContentChange(Event $e): void
@@ -325,13 +338,20 @@ trait PluginTrait
             return;
         }
 
-        $elementId = self::_pageToReread($element);
+        try {
+            $elementId = self::_pageToReread($element);
 
-        if ($elementId === null) {
-            return;
+            if ($elementId === null) {
+                return;
+            }
+
+            self::_queueExtraction($elementId);
+        } catch (Throwable $err) {
+            Craft::error(
+                'Could not queue a reread after a content change: ' . $err->getMessage(),
+                'link-audit',
+            );
         }
-
-        self::_queueExtraction($elementId);
     }
 
     /**
@@ -349,8 +369,9 @@ trait PluginTrait
      * @param Element $element The element that was saved.
      * @return int|null The element id to reread, or null when this save is not
      *                  worth a job.
-     * @author John Henry Donovan
+     * @throws InvalidConfigException
      * @since 1.0.0
+     * @author John Henry Donovan <info@johnhenry.ie>
      */
     private static function _pageToReread(Element $element): ?int
     {
@@ -414,7 +435,7 @@ trait PluginTrait
      *
      * @param int $elementId The element to reread.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _queueExtraction(int $elementId): void
@@ -437,7 +458,7 @@ trait PluginTrait
      * so a link to it means the same URL on every environment.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerCpUrlRules(): void
@@ -481,7 +502,7 @@ trait PluginTrait
      * truth is that it was never read.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerElementSidebarPanel(): void
@@ -597,7 +618,7 @@ trait PluginTrait
      * the setting is off it is two comparisons and no queries at all.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerGarbageCollection(): void
@@ -619,7 +640,7 @@ trait PluginTrait
      * read without fishing through web.log and queue.log.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerLogTarget(): void
@@ -646,7 +667,7 @@ trait PluginTrait
      * link does not matter is not the same decision as asking for a scan.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerPermissions(): void
@@ -685,7 +706,7 @@ trait PluginTrait
      * own, and Craft deletes them constantly.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerReferenceCleanup(): void
@@ -733,7 +754,7 @@ trait PluginTrait
      * same, because the question is the same question.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerRestoreExtraction(): void
@@ -756,7 +777,7 @@ trait PluginTrait
      * fields full of links, which is the same call the scan query makes.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerScanOnSave(): void
@@ -773,7 +794,7 @@ trait PluginTrait
      * by people.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerWidgetTypes(): void

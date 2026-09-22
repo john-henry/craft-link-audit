@@ -61,10 +61,12 @@
             {{ actionInput('link-audit/scans/start') }}
             {{ redirectInput('link-audit?site=' ~ siteHandle) }}
             {{ forms.hidden({ name: 'siteId', value: siteId }) }}
-            <button type="submit" class="btn" name="mode" value="incremental">
-                <span class="label">{{ 'Scan what changed'|t('link-audit') }}</span>
-                <div class="spinner spinner-absolute"></div>
-            </button>
+            {% if latestScan is not null %}
+                <button type="submit" class="btn" name="mode" value="incremental">
+                    <span class="label">{{ 'Scan what changed'|t('link-audit') }}</span>
+                    <div class="spinner spinner-absolute"></div>
+                </button>
+            {% endif %}
             <button type="submit" class="btn submit" name="mode" value="full">
                 <span class="label">{{ 'Run full scan'|t('link-audit') }}</span>
                 <div class="spinner spinner-absolute"></div>
@@ -106,6 +108,40 @@
 {% endblock %}
 
 {% block content %}
+    {% css %}
+    :is(#link-audit-start, #link-audit-first-run) .link-audit-steps { list-style: none; margin: var(--s) 0 0 0; padding: 0; counter-reset: la-step; }
+    :is(#link-audit-start, #link-audit-first-run) .link-audit-steps > li {
+        counter-increment: la-step;
+        display: flex;
+        gap: var(--m);
+        padding-block: var(--m);
+        border-block-start: 1px solid var(--border-hairline);
+    }
+    :is(#link-audit-start, #link-audit-first-run) .link-audit-steps > li::before {
+        content: counter(la-step);
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background-color: var(--gray-100);
+        color: var(--text-color);
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+    :is(#link-audit-start, #link-audit-first-run) .link-audit-steps .link-audit-start-body { flex: 1; min-width: 0; }
+    :is(#link-audit-start, #link-audit-first-run) .link-audit-steps .link-audit-start-body > a:first-child,
+    :is(#link-audit-start, #link-audit-first-run) .link-audit-steps .link-audit-start-body > strong:first-child { font-weight: 600; }
+    :is(#link-audit-start, #link-audit-first-run) .link-audit-steps .link-audit-start-body > p { margin-block: 2px 0; }
+    :is(#link-audit-start, #link-audit-first-run) .link-audit-steps-footer {
+        margin-block: 0;
+        padding-block-start: var(--m);
+        border-block-start: 1px solid var(--border-hairline);
+    }
+    {% endcss %}
+
     {% if runningScan %}
         {% css %}
         #link-audit-progress td[data-progress] { font-variant-numeric: tabular-nums; }
@@ -247,8 +283,38 @@
     {% endif %}
 
     {% if latestScan is null and not runningScan %}
-        <div class="zilch">
-            <p>{{ 'Nothing has been scanned yet. Run a scan and every link in your content gets pulled out, checked once, and reported here.'|t('link-audit') }}</p>
+        <div class="pane" id="link-audit-first-run">
+            <h2>{{ 'Getting started'|t('link-audit') }}</h2>
+            <p class="light">
+                {{ 'Nothing has been scanned yet. Run a scan and every link in your content gets pulled out, checked once, and reported here.'|t('link-audit') }}
+            </p>
+            <ol class="link-audit-steps">
+                <li>
+                    <div class="link-audit-start-body">
+                        <strong>{{ 'Run a full scan'|t('link-audit') }}</strong>
+                        {% if canRunScans %}
+                            <p class="light">{{ 'Press Run full scan at the top of this page. The first one reads everything, so it is the long one. After that, Scan what changed only reads what has been edited since.'|t('link-audit') }}</p>
+                        {% else %}
+                            <p class="light">{{ 'Your account is not allowed to run scans, so ask somebody who is to start the first one.'|t('link-audit') }}</p>
+                        {% endif %}
+                    </div>
+                </li>
+                <li>
+                    <div class="link-audit-start-body">
+                        <strong>{{ 'Leave it to the queue'|t('link-audit') }}</strong>
+                        <p class="light">{{ 'The scan runs in the background, so there is no need to stay on this page. Its progress shows here while it runs. If nothing has moved after a few minutes, check that the queue is running.'|t('link-audit') }}</p>
+                    </div>
+                </li>
+                <li>
+                    <div class="link-audit-start-body">
+                        <strong>{{ 'Work from the top of the report'|t('link-audit') }}</strong>
+                        <p class="light">{{ 'When the scan finishes, the counts fill in and a Where to start pane lists what to fix first. Click any address to see every page carrying it, with an Edit link that opens the page at the very link.'|t('link-audit') }}</p>
+                    </div>
+                </li>
+            </ol>
+            <p class="light link-audit-steps-footer">
+                <a href="https://johnhenry.ie/plugins/link-audit/docs/getting-started/using-the-dashboard" target="_blank" rel="noopener" data-icon="external">{{ 'Read the guide to the Overview, with a short video walkthrough'|t('link-audit') }}</a>
+            </p>
         </div>
     {% else %}
         {% css %}
@@ -298,47 +364,17 @@
 
         {% if whereToStart %}
             {% css %}
-            #link-audit-start ol { list-style: none; margin: var(--s) 0 0 0; padding: 0; counter-reset: la-step; }
-            #link-audit-start ol > li {
-                counter-increment: la-step;
-                display: flex;
-                gap: var(--m);
-                padding-block: var(--m);
-                border-block-start: 1px solid var(--border-hairline);
-            }
-            #link-audit-start ol > li::before {
-                content: counter(la-step);
-                flex: none;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 26px;
-                height: 26px;
-                border-radius: 50%;
-                background-color: var(--gray-100);
-                color: var(--text-color);
-                font-weight: 600;
-                font-variant-numeric: tabular-nums;
-            }
-            #link-audit-start .link-audit-start-body { flex: 1; min-width: 0; }
-            #link-audit-start .link-audit-start-body > a:first-child { font-weight: 600; }
-            #link-audit-start .link-audit-start-body > p { margin-block: 2px 0; }
             #link-audit-start table { margin-block-start: var(--s); }
             #link-audit-start table td { border-block-start: 1px solid var(--border-hairline); padding-block: var(--s); }
             #link-audit-start table td:first-child { overflow-wrap: anywhere; }
             #link-audit-start td.rightalign { font-variant-numeric: tabular-nums; white-space: nowrap; }
-            #link-audit-start > p:last-child {
-                margin-block: 0;
-                padding-block-start: var(--m);
-                border-block-start: 1px solid var(--border-hairline);
-            }
             {% endcss %}
             <div class="pane" id="link-audit-start">
                 <h2>{{ 'Where to start'|t('link-audit') }}</h2>
                 <p class="light">
                     {{ 'There is no need to work through a list this size from the top. Start with these and it comes down quicker.'|t('link-audit') }}
                 </p>
-                <ol>
+                <ol class="link-audit-steps">
                     {% if whereToStart.internalBroken > 0 %}
                         <li>
                             <div class="link-audit-start-body">
@@ -393,7 +429,7 @@
                         </li>
                     {% endif %}
                 </ol>
-                <p class="light">
+                <p class="light link-audit-steps-footer">
                     {{ 'You can leave the rest for now: Unverifiable and the temporary redirects need nothing from you, and the permanent redirects will keep for a quieter week.'|t('link-audit') }}
                 </p>
             </div>

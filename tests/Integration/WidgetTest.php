@@ -8,6 +8,7 @@ use craft\elements\User;
 use craft\helpers\Db;
 use craft\helpers\StringHelper;
 use craft\web\View;
+use yii\base\Event;
 use johnhenry\linkaudit\enums\ScanStatus;
 use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\records\ReferenceRecord;
@@ -151,5 +152,60 @@ describe('BrokenLinksWidget', function() {
         $this->actingAs(UserFactory::factory()->create());
 
         expect(BrokenLinksWidget::isSelectable())->toBeFalse();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// A widget that throws takes the dashboard with it
+//
+// Craft asks a widget for its body, and for its settings pane, without a catch
+// of either: DashboardController calls both straight. So anything escaping
+// them is not this tile failing, it is the whole dashboard refusing to draw
+// for everybody who has it, including the page they would use to take it off.
+//
+// The reading was held already. The render was not, and a template is the more
+// likely of the two to throw: a deploy that half-landed, a Twig error, an
+// upgrade that moved something out from under it. These make the render throw
+// and ask for the body anyway.
+// ---------------------------------------------------------------------------
+
+describe('BrokenLinksWidget when something under it throws', function() {
+    /** Makes every template render throw, for as long as the callback runs. */
+    $whileRenderingThrows = function(callable $body): mixed {
+        $handler = static function(): void {
+            throw new RuntimeException('the template went missing');
+        };
+
+        Event::on(View::class, View::EVENT_BEFORE_RENDER_TEMPLATE, $handler);
+
+        try {
+            return $body();
+        } finally {
+            Event::off(View::class, View::EVENT_BEFORE_RENDER_TEMPLATE, $handler);
+        }
+    };
+
+    it('gives back nothing rather than letting it out', function() use ($whileRenderingThrows) {
+        $this->actingAs(UserFactory::factory()->admin(true)->create());
+
+        $body = $whileRenderingThrows(static fn(): ?string => (new BrokenLinksWidget())->getBodyHtml());
+
+        expect($body)->toBeNull();
+    });
+
+    it('does the same for the settings pane', function() use ($whileRenderingThrows) {
+        $this->actingAs(UserFactory::factory()->admin(true)->create());
+
+        $html = $whileRenderingThrows(static fn(): ?string => (new BrokenLinksWidget())->getSettingsHtml());
+
+        expect($html)->toBeNull();
+    });
+
+    it('still draws normally once nothing is throwing', function() {
+        // The other half: returning null on anything at all would pass the two
+        // above and leave the tile permanently blank.
+        $this->actingAs(UserFactory::factory()->admin(true)->create());
+
+        expect((new BrokenLinksWidget())->getBodyHtml())->not->toBeNull();
     });
 });

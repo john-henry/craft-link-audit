@@ -32,7 +32,7 @@ use yii\console\ExitCode;
  * and fencing them off from their own database would be theatre. Left to itself
  * this covers every site on the installation. Pass `--site` to keep it to one.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ExportController extends Controller
@@ -72,7 +72,7 @@ class ExportController extends Controller
      * @return int The exit code.
      * @throws ConsoleException If the site handle does not belong to a site.
      * @throws InvalidConfigException If the export service cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionCsv(): int
@@ -106,7 +106,11 @@ class ExportController extends Controller
             return ExitCode::IOERR;
         }
 
-        $handle = fopen($path, 'w');
+        // Binary mode. The rows carry their own CRLF line endings, as RFC 4180
+        // asks, and a text-mode handle on Windows translates the \n inside them
+        // again on the way out: every line ends \r\r\n and the file is broken
+        // for the spreadsheet it was written for.
+        $handle = fopen($path, 'wb');
 
         if ($handle === false) {
             $this->stderr("Could not open $path for writing.\n", Console::FG_RED);
@@ -137,7 +141,7 @@ class ExportController extends Controller
      *
      * @param string $actionID The action being run.
      * @return string[] The options it takes.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function options($actionID): array
@@ -159,7 +163,7 @@ class ExportController extends Controller
      * @throws ConsoleException If the handle does not belong to a site. Better
      *                          than quietly covering every site, which is not
      *                          what anybody who typed a handle wanted.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _siteIds(): array

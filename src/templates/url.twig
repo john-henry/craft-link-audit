@@ -3,6 +3,7 @@
 {% import '_includes/forms.twig' as forms %}
 
 {% set title = 'URL'|t('link-audit') %}
+{% set selectedSubnavItem = 'overview' %}
 {% set returnUrl = 'link-audit/url?hash=' ~ url.urlHash %}
 {% set crumbs = [
     { label: 'Link Audit'|t('link-audit'), url: cpUrl('link-audit') },

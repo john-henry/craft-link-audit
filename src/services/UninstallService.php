@@ -34,7 +34,7 @@ use yii\base\InvalidConfigException;
  * takes part in the transaction the uninstall opened: a failure further down
  * puts all of it back.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class UninstallService extends Component
@@ -49,7 +49,7 @@ class UninstallService extends Component
      *
      * @return void
      * @throws InvalidConfigException If the queue component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function clearAll(): void
@@ -77,7 +77,7 @@ class UninstallService extends Component
      * is worse than one they have to add again.
      *
      * @return int How many tiles were removed.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function forgetDashboardWidgets(): int
@@ -98,7 +98,7 @@ class UninstallService extends Component
      *
      * @return int How many jobs were released.
      * @throws InvalidConfigException If the queue component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function releaseQueuedJobs(): int

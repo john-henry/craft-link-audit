@@ -43,7 +43,7 @@ use craft\db\ActiveRecord;
  * @property string|null $dateLastOk
  * @property string|null $dateLastBroken
  * @property string|null $nextCheckAfter
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class UrlRecord extends ActiveRecord
@@ -56,7 +56,7 @@ class UrlRecord extends ActiveRecord
      * @inheritdoc
      *
      * @return string The table name.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function tableName(): string

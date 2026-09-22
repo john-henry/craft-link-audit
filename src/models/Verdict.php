@@ -23,7 +23,7 @@ use johnhenry\linkaudit\enums\UrlStatus;
  * written about it. {@see self::isDeferred()} is how a caller tells the two
  * apart, and the scheduler uses it to hand the URL back for a later pass.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class Verdict
@@ -121,7 +121,7 @@ class Verdict
      *
      * @param int|null $code The HTTP status code.
      * @return string|null The plain meaning, or null when there is no code.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function httpStatusLabel(?int $code): ?string
@@ -167,7 +167,7 @@ class Verdict
      *
      * @param string|null $reason The stored reason code.
      * @return string|null The label, or null when there is no reason at all.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function reasonLabel(?string $reason): ?string
@@ -225,7 +225,7 @@ class Verdict
      * @param int $attempts How many attempts this verdict took. Set by the
      *                      scheduler, which owns retries; the checker itself
      *                      always reports one.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function __construct(
@@ -249,7 +249,7 @@ class Verdict
      * again on a later pass and write nothing in the meantime.
      *
      * @return bool Whether this is a deferral rather than a verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isDeferred(): bool
@@ -262,7 +262,7 @@ class Verdict
      *
      * @param int $attempts How many attempts the verdict took.
      * @return self The copy.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function withAttempts(int $attempts): self

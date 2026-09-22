@@ -45,7 +45,7 @@ use yii\base\Component;
  * {@see ReportService}: nothing here is date arithmetic, it is a column on its
  * way out of the database.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ExportService extends Component
@@ -104,7 +104,7 @@ class ExportService extends Component
      *                                      exactly as the list screen carries
      *                                      them.
      * @return Generator<int, string> The file, in chunks.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function csv(UrlStatus $status, array $siteIds, array $filters = []): Generator
@@ -145,7 +145,7 @@ class ExportService extends Component
      *
      * @param UrlStatus $status The verdict being exported.
      * @return string The file name.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function filename(UrlStatus $status): string
@@ -168,7 +168,7 @@ class ExportService extends Component
      * @param array<string, mixed> $filters Any of `host`, `elementType`,
      *                                      `source`, `permanent`, `internal` and `search`.
      * @return int The number of reference rows.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function rowCount(UrlStatus $status, array $siteIds, array $filters = []): int
@@ -195,7 +195,7 @@ class ExportService extends Component
      * @param Query $query The query, filtered in place.
      * @param array<string, mixed> $filters The filters from the request.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _addReferenceFilters(Query $query, array $filters): void
@@ -227,7 +227,7 @@ class ExportService extends Component
      * @param int[] $siteIds The sites to read references on.
      * @param array<string, mixed> $filters The filters from the request.
      * @return Generator<int, array<int, array<string, mixed>>> The batches.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _batches(UrlStatus $status, array $siteIds, array $filters): Generator
@@ -265,7 +265,7 @@ class ExportService extends Component
      *
      * @param mixed $value The value for the cell.
      * @return string The cell.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _cell(mixed $value): string
@@ -295,12 +295,12 @@ class ExportService extends Component
      *
      * @param array<int, array<int, string>> $rows The rows.
      * @return string The text.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _chunk(array $rows): string
     {
-        $handle = fopen('php://temp', 'r+');
+        $handle = fopen('php://temp', 'r+b');
 
         if ($handle === false) {
             return '';
@@ -327,7 +327,7 @@ class ExportService extends Component
      *
      * @param mixed $value The stored value.
      * @return string The date, or an empty string when there is none.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _date(mixed $value): string
@@ -347,7 +347,7 @@ class ExportService extends Component
      * @param int $elementId The element.
      * @param int $siteId The site it is read on.
      * @return string The memo key.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _elementKey(int $elementId, int $siteId): string
@@ -380,7 +380,7 @@ class ExportService extends Component
      *                                         element. A key is simply missing
      *                                         when the element could not be
      *                                         loaded.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _elements(array $batch): array
@@ -447,7 +447,7 @@ class ExportService extends Component
      *
      * @param array<int, int> $ids The element ids.
      * @return array<int, class-string<ElementInterface>> Element id to class.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _elementTypes(array $ids): array
@@ -483,7 +483,7 @@ class ExportService extends Component
      *
      * @param bool $withRedirect Whether the redirect columns are included.
      * @return array<int, string> The heading row.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _header(bool $withRedirect): array
@@ -515,7 +515,7 @@ class ExportService extends Component
      *
      * @param array<string, mixed> $row The reference row.
      * @return int The element id.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _ownerId(array $row): int
@@ -530,7 +530,7 @@ class ExportService extends Component
      *
      * @param array<string, mixed> $row The reference row.
      * @return string The memo key.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _ownerKey(array $row): string
@@ -553,7 +553,7 @@ class ExportService extends Component
      * @param int[] $siteIds The sites being read.
      * @param array<string, mixed> $filters The filters from the request.
      * @return array<int, int> URL id to the number of places.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _placeCounts(array $batch, array $siteIds, array $filters): array
@@ -594,7 +594,7 @@ class ExportService extends Component
      * @param int[] $siteIds The sites to read references on.
      * @param array<string, mixed> $filters The filters from the request.
      * @return Query The query.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _query(UrlStatus $status, array $siteIds, array $filters): Query
@@ -667,7 +667,7 @@ class ExportService extends Component
      *
      * @param array<string, mixed> $row The reference row.
      * @return string The memo key.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _referenceKey(array $row): string
@@ -690,7 +690,7 @@ class ExportService extends Component
      * @param bool $withRedirect Whether the redirect columns are included, in
      *                           step with {@see self::_header()}.
      * @return array<int, string> The cells.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _row(array $row, array $elements, array $places, array $sourceLabels, bool $withRedirect): array

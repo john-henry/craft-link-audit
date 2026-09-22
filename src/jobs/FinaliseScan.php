@@ -15,7 +15,7 @@ use Throwable;
  * Closes a scan out: recount, tidy away what is no longer referenced, and mark
  * the run finished.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class FinaliseScan extends BaseJob
@@ -39,7 +39,7 @@ class FinaliseScan extends BaseJob
      * @param mixed $queue The queue running the job.
      * @return void
      * @throws Throwable If the tidy up cannot be completed.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function execute($queue): void
@@ -55,7 +55,7 @@ class FinaliseScan extends BaseJob
      * @inheritdoc
      *
      * @return string|null The description shown in the queue.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function defaultDescription(): ?string

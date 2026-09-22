@@ -19,7 +19,7 @@ use Craft;
  * `dateStarted` is nullable: a scan that has been waiting in the queue for an
  * hour has not been running for an hour.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 enum ScanStatus: string
@@ -66,7 +66,7 @@ enum ScanStatus: string
      * What this stage is called on screen.
      *
      * @return string The translated label.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function label(): string

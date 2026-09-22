@@ -16,7 +16,7 @@ namespace johnhenry\linkaudit\enums;
  * request; and an ignored one is recorded so the author can see it was met and
  * left alone.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 enum LinkKind: string

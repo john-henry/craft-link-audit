@@ -45,7 +45,7 @@ use yii\console\ExitCode;
  * site is not one command hanging on a terminal for an hour. Run the queue after
  * them, or leave it to a worker.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ScanController extends Controller
@@ -103,7 +103,7 @@ class ScanController extends Controller
      *
      * @return int The exit code.
      * @throws ConsoleException If the site handle does not belong to a site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionAll(): int
@@ -117,7 +117,7 @@ class ScanController extends Controller
      *
      * @return int The exit code.
      * @throws InvalidConfigException If the queue component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionCancel(): int
@@ -151,7 +151,7 @@ class ScanController extends Controller
      * Queues the check phase on its own, for the URLs already waiting.
      *
      * @return int The exit code.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionCheckPending(): int
@@ -180,7 +180,7 @@ class ScanController extends Controller
      * @return int The exit code.
      * @throws ConsoleException If the site handle does not belong to a site.
      * @throws Throwable If the element's reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionElement(): int
@@ -193,6 +193,21 @@ class ScanController extends Controller
 
         $siteId = $this->_siteId();
         $found = LinkAudit::$plugin->getScanService()->scanElement($this->elementId, $siteId);
+
+        // Nothing read is not nothing found. Printing a zero in green for an id
+        // that names no element reads as a page with no links on it.
+        if ($found === null) {
+            $this->stderr(
+                sprintf(
+                    "Nothing was read for element %d: either no element with that id lives on the "
+                    . "sites being read, or it is excluded from the audit.\n",
+                    $this->elementId,
+                ),
+                Console::FG_RED,
+            );
+
+            return ExitCode::DATAERR;
+        }
 
         $this->stdout(
             sprintf("Read element %d: %d links stored.\n", $this->elementId, $found),
@@ -207,7 +222,7 @@ class ScanController extends Controller
      *
      * @return int The exit code.
      * @throws ConsoleException If the site handle does not belong to a site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionIncremental(): int
@@ -231,7 +246,7 @@ class ScanController extends Controller
      * points at.
      *
      * @return int The exit code.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionPrune(): int
@@ -269,7 +284,7 @@ class ScanController extends Controller
      * way a reset would.
      *
      * @return int The exit code.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionRecheckBroken(): int
@@ -316,7 +331,7 @@ class ScanController extends Controller
      *
      * @return int The exit code.
      * @throws Throwable If the check cannot be run.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionRecheckUrl(): int
@@ -373,7 +388,7 @@ class ScanController extends Controller
      * Prints what the last scan found.
      *
      * @return int The exit code.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionReport(): int
@@ -395,7 +410,7 @@ class ScanController extends Controller
      *
      * @return int The exit code.
      * @throws InvalidConfigException If the queue component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionReset(): int
@@ -436,13 +451,16 @@ class ScanController extends Controller
      *
      * @param string $actionID The action being run.
      * @return string[] The options it takes.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function options($actionID): array
     {
         return array_merge(parent::options($actionID), match ($actionID) {
-            'all', 'incremental', 'report' => ['site'],
+            // Not 'report': it prints what the last scan found across the
+            // install, and offering --site there took the option and did
+            // nothing with it, a mistyped handle included.
+            'all', 'incremental' => ['site'],
             'element' => ['elementId', 'site'],
             'prune' => ['days'],
             'recheck-broken' => ['all'],
@@ -462,7 +480,7 @@ class ScanController extends Controller
      * @param string $heading The heading.
      * @param array<string, int|string> $rows The rows, as label to value.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _printTable(string $heading, array $rows): void
@@ -490,7 +508,7 @@ class ScanController extends Controller
      * @param ScanMode $mode What the run is for.
      * @return int The exit code.
      * @throws ConsoleException If the site handle does not belong to a site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _queue(ScanMode $mode): int
@@ -526,7 +544,7 @@ class ScanController extends Controller
      * Prints the top offending hosts.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _reportHosts(): void
@@ -553,7 +571,7 @@ class ScanController extends Controller
      * Prints the last few scans.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _reportScans(): void
@@ -616,7 +634,7 @@ class ScanController extends Controller
      * to them.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _reportVerdicts(): void
@@ -654,7 +672,7 @@ class ScanController extends Controller
      * are not part of the deal.
      *
      * @return string The warning.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _resetWarning(): string
@@ -673,7 +691,7 @@ class ScanController extends Controller
      * @throws ConsoleException If the handle does not belong to a site. Better
      *                          than quietly covering every site, which is not
      *                          what anybody who typed a handle wanted.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _siteId(): ?int
@@ -700,7 +718,7 @@ class ScanController extends Controller
      *
      * @param bool $internal Whether to count this installation's own URLs.
      * @return int The count.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _urlCount(bool $internal): int

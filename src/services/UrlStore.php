@@ -41,7 +41,7 @@ use yii\db\IntegrityException;
  * Dates go through `DateTimeHelper` throughout, since everything in here is a
  * row on its way in or out of the database.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class UrlStore extends Component
@@ -81,6 +81,18 @@ class UrlStore extends Component
      */
     private const _MAX_SCHEME = 32;
 
+    /**
+     * @var int How many times a verdict write will re-read and try again when
+     * another worker moved the row underneath it.
+     *
+     * Two checks of the same URL at once is uncommon but reachable: a scheduled
+     * scan, a rendered crawl and somebody pressing Check again all write here,
+     * and nothing claims a row before writing to it. Three is enough that a
+     * genuine collision settles; past that the last attempt writes anyway,
+     * because a verdict nobody recorded is worse than a fail count one out.
+     */
+    private const _VERDICT_WRITE_ATTEMPTS = 3;
+
     // =========================================================================
     // Public Methods
     // =========================================================================
@@ -103,7 +115,7 @@ class UrlStore extends Component
      * @param int $elementId The page being crawled.
      * @param int $siteId The site it was read on.
      * @return int[] The URL row ids already accounted for.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function attributedUrlIds(int $elementId, int $siteId): array
@@ -139,7 +151,7 @@ class UrlStore extends Component
      * @param int|null $retryAfterSeconds How long the host asked to be left for,
      *                                    when it said.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function defer(int $urlId, ?int $retryAfterSeconds = null): void
@@ -168,7 +180,7 @@ class UrlStore extends Component
      *
      * @param int $elementId The element that has gone.
      * @return int How many reference rows went.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function deleteReferencesForElement(int $elementId): int
@@ -218,7 +230,7 @@ class UrlStore extends Component
      * on every check phase for ever.
      *
      * @return Query The query, ordered by id so paging cannot skip a row.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function pendingQuery(): Query
@@ -267,7 +279,7 @@ class UrlStore extends Component
      * @return void
      * @throws Exception If a time to live setting cannot be turned into an
      *                   interval.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function recordVerdict(int $urlId, Verdict $verdict): void
@@ -276,72 +288,93 @@ class UrlStore extends Component
             return;
         }
 
-        $row = (new Query())
-            ->select(['failCount', 'status'])
-            ->from([UrlRecord::tableName()])
-            ->where(['id' => $urlId])
-            ->one();
-
-        if ($row === null) {
-            Craft::warning("Tried to record a verdict for URL $urlId, which is gone.", 'link-audit');
-
-            return;
-        }
-
-        // Nothing is ever written over an ignored row. That is the whole point of
-        // the ignores table: extraction resolves internal links as it stores
-        // them and the check phase writes whatever came back, so without this one
-        // condition a rescan would overwrite an author's decision and put the URL
-        // back in the lists.
+        // The fail count is read, added to, and written back, so two workers
+        // checking the same URL at once could each write a count based on what
+        // they read before the other wrote. The write is therefore conditional
+        // on the row still holding what was read: nothing is locked, and the
+        // count of rows the update touched says whether it still did.
         //
-        // It also keeps the history. A URL ignored while it was broken holds the
-        // 404, the message and the date it went, which is exactly what somebody
-        // reviewing the decision months later wants to see; rewriting the row
-        // with an empty ignored verdict on every scan would rub all of that out.
-        if ((string)$row['status'] === UrlStatus::Ignored->value) {
-            return;
+        // An expression would be the usual answer for a counter, the way
+        // ScanService::_increment() moves its own, but the status written here
+        // is decided by the count it lands on, so the new value has to be known
+        // here rather than only inside the statement.
+        for ($attempt = 1; $attempt <= self::_VERDICT_WRITE_ATTEMPTS; $attempt++) {
+            $row = (new Query())
+                ->select(['failCount', 'status'])
+                ->from([UrlRecord::tableName()])
+                ->where(['id' => $urlId])
+                ->one();
+
+            if ($row === null) {
+                Craft::warning("Tried to record a verdict for URL $urlId, which is gone.", 'link-audit');
+
+                return;
+            }
+
+            // Nothing is ever written over an ignored row. That is the whole point of
+            // the ignores table: extraction resolves internal links as it stores
+            // them and the check phase writes whatever came back, so without this one
+            // condition a rescan would overwrite an author's decision and put the URL
+            // back in the lists.
+            //
+            // It also keeps the history. A URL ignored while it was broken holds the
+            // 404, the message and the date it went, which is exactly what somebody
+            // reviewing the decision months later wants to see; rewriting the row
+            // with an empty ignored verdict on every scan would rub all of that out.
+            if ((string)$row['status'] === UrlStatus::Ignored->value) {
+                return;
+            }
+
+            $now = DateTimeHelper::now();
+            $checkedAt = Db::prepareDateForDb($now);
+            $failCount = $this->_nextFailCount($verdict->status, (int)$row['failCount']);
+            // The recorded status, which is not always the verdict's: a URL that has
+            // failed often enough stops being "no answer today" and becomes broken.
+            $status = $this->_promotedStatus($verdict, $failCount);
+            $nextCheckAfter = $this->_nextCheckAfter($status, $now);
+
+            $columns = [
+                'status' => $status->value,
+                'httpStatus' => $verdict->httpStatus,
+                'method' => $verdict->method,
+                'finalUrl' => $verdict->finalUrl,
+                'redirectCount' => $verdict->redirectCount,
+                'redirectPermanent' => $verdict->redirectPermanent,
+                'redirectStatus' => $verdict->redirectStatus,
+                'reason' => $this->_truncate($verdict->reason, self::_MAX_REASON),
+                'message' => $verdict->message,
+                'responseTimeMs' => $verdict->responseTimeMs,
+                'failCount' => $failCount,
+                'dateLastChecked' => $checkedAt,
+                'nextCheckAfter' => $nextCheckAfter !== null ? Db::prepareDateForDb($nextCheckAfter) : null,
+            ];
+
+            // A redirect that lands on a 2xx is a URL that answered, so it counts as
+            // the last time this link was known to work.
+            if ($status === UrlStatus::Ok || $status === UrlStatus::Redirect) {
+                $columns['dateLastOk'] = $checkedAt;
+            }
+
+            // Stamped only when the URL crosses into broken, not on every recheck
+            // that finds it still broken. The date then means when it broke, which
+            // is what the "new broken links" notification counts from: restamping
+            // it on a re-confirmation made a rescan or a page recheck report the
+            // same standing failures as though they had just appeared.
+            if ($status === UrlStatus::Broken && (string)$row['status'] !== UrlStatus::Broken->value) {
+                $columns['dateLastBroken'] = $checkedAt;
+            }
+
+            // The last attempt writes whatever it has: by then the row has moved
+            // under this one twice, and losing the verdict entirely would be worse
+            // than a fail count that is one behind.
+            $condition = $attempt < self::_VERDICT_WRITE_ATTEMPTS
+                ? ['id' => $urlId, 'failCount' => (int)$row['failCount'], 'status' => (string)$row['status']]
+                : ['id' => $urlId];
+
+            if (Db::update(UrlRecord::tableName(), $columns, $condition) > 0) {
+                break;
+            }
         }
-
-        $now = DateTimeHelper::now();
-        $checkedAt = Db::prepareDateForDb($now);
-        $failCount = $this->_nextFailCount($verdict->status, (int)$row['failCount']);
-        // The recorded status, which is not always the verdict's: a URL that has
-        // failed often enough stops being "no answer today" and becomes broken.
-        $status = $this->_promotedStatus($verdict, $failCount);
-        $nextCheckAfter = $this->_nextCheckAfter($status, $now);
-
-        $columns = [
-            'status' => $status->value,
-            'httpStatus' => $verdict->httpStatus,
-            'method' => $verdict->method,
-            'finalUrl' => $verdict->finalUrl,
-            'redirectCount' => $verdict->redirectCount,
-            'redirectPermanent' => $verdict->redirectPermanent,
-            'redirectStatus' => $verdict->redirectStatus,
-            'reason' => $this->_truncate($verdict->reason, self::_MAX_REASON),
-            'message' => $verdict->message,
-            'responseTimeMs' => $verdict->responseTimeMs,
-            'failCount' => $failCount,
-            'dateLastChecked' => $checkedAt,
-            'nextCheckAfter' => $nextCheckAfter !== null ? Db::prepareDateForDb($nextCheckAfter) : null,
-        ];
-
-        // A redirect that lands on a 2xx is a URL that answered, so it counts as
-        // the last time this link was known to work.
-        if ($status === UrlStatus::Ok || $status === UrlStatus::Redirect) {
-            $columns['dateLastOk'] = $checkedAt;
-        }
-
-        // Stamped only when the URL crosses into broken, not on every recheck
-        // that finds it still broken. The date then means when it broke, which
-        // is what the "new broken links" notification counts from: restamping
-        // it on a re-confirmation made a rescan or a page recheck report the
-        // same standing failures as though they had just appeared.
-        if ($status === UrlStatus::Broken && (string)$row['status'] !== UrlStatus::Broken->value) {
-            $columns['dateLastBroken'] = $checkedAt;
-        }
-
-        Db::update(UrlRecord::tableName(), $columns, ['id' => $urlId]);
 
         LinkAudit::$plugin->getReportService()->invalidateCounts();
     }
@@ -377,7 +410,7 @@ class UrlStore extends Component
      * @throws InvalidArgumentException If a reference is missing `urlId` or
      *                                  `elementType`.
      * @throws Throwable If the transaction cannot be completed.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function replaceReferencesFor(
@@ -481,7 +514,7 @@ class UrlStore extends Component
      * @throws IntegrityException If the row cannot be inserted for a reason
      *                            other than another worker having got there
      *                            first.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function upsert(
@@ -561,7 +594,7 @@ class UrlStore extends Component
      * @param int $days The number of days, floored at zero.
      * @return DateInterval The interval.
      * @throws Exception If the interval cannot be built.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _days(int $days): DateInterval
@@ -574,7 +607,7 @@ class UrlStore extends Component
      *
      * @param string $urlHash The sha1 of the normalised URL.
      * @return int|null The row id, or null when the URL has not been seen.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _findIdByHash(string $urlHash): ?int
@@ -594,7 +627,7 @@ class UrlStore extends Component
      * @param int $hours The number of hours, floored at zero.
      * @return DateInterval The interval.
      * @throws Exception If the interval cannot be built.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _hours(int $hours): DateInterval
@@ -614,7 +647,7 @@ class UrlStore extends Component
      * @param DateTime $from The moment the check happened.
      * @return DateTime|null When to check again, or null to never schedule it.
      * @throws Exception If the interval cannot be built.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _nextCheckAfter(UrlStatus $status, DateTime $from): ?DateTime
@@ -642,7 +675,7 @@ class UrlStore extends Component
      * @param UrlStatus $status The verdict just recorded.
      * @param int $current The count before this check.
      * @return int The count after it.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _nextFailCount(UrlStatus $status, int $current): int
@@ -671,7 +704,7 @@ class UrlStore extends Component
      * @param Verdict $verdict The verdict just recorded.
      * @param int $failCount The consecutive failures after this one.
      * @return UrlStatus The status to write.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _promotedStatus(Verdict $verdict, int $failCount): UrlStatus
@@ -698,7 +731,7 @@ class UrlStore extends Component
      *
      * @param int[] $urlIds The URLs whose last reference may have just gone.
      * @return int How many rows went.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _pruneUrls(array $urlIds): int
@@ -731,7 +764,7 @@ class UrlStore extends Component
      * @param string|null $value The value to clip.
      * @param int $length The column width.
      * @return string|null The clipped value.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _truncate(?string $value, int $length): ?string

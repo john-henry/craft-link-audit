@@ -31,7 +31,7 @@ use yii\web\NotFoundHttpException;
  * at the top of a dozen actions. Anything that changes something asks for more
  * on top of it.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 abstract class BaseController extends Controller
@@ -115,7 +115,7 @@ abstract class BaseController extends Controller
      * @param mixed $action The action about to run.
      * @return bool Whether the action may run.
      * @throws ForbiddenHttpException If the user may not read the reports.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function beforeAction($action): bool
@@ -138,7 +138,7 @@ abstract class BaseController extends Controller
      *
      * @return int[] The site ids.
      * @throws ForbiddenHttpException If the user may not edit any site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function allowedSiteIds(): array
@@ -161,7 +161,7 @@ abstract class BaseController extends Controller
      * @throws ForbiddenHttpException If the user may not edit any site, since a
      *                                report scoped to no sites is not a page
      *                                worth rendering.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function allowedSites(): array
@@ -188,7 +188,7 @@ abstract class BaseController extends Controller
      * to track the templates.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function registerJsTranslations(): void
@@ -210,7 +210,7 @@ abstract class BaseController extends Controller
      * URL; the one caller that has it adds it itself.
      *
      * @return array<string, string> The filters.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function reportFilters(): array
@@ -235,7 +235,7 @@ abstract class BaseController extends Controller
      *
      * @return Site The site.
      * @throws ForbiddenHttpException If the user may not edit any site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function requestedSite(): Site
@@ -248,7 +248,7 @@ abstract class BaseController extends Controller
      *
      * @return int The site id.
      * @throws ForbiddenHttpException If the user may not edit any site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function requestedSiteId(): int
@@ -277,7 +277,7 @@ abstract class BaseController extends Controller
      * @throws ForbiddenHttpException If the user may not edit any site.
      * @throws NotFoundHttpException If nothing on the user's sites points at
      *                               that URL.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function requireReadableUrl(int $urlId): void
@@ -308,7 +308,7 @@ abstract class BaseController extends Controller
      * @return int The site id to work with.
      * @throws ForbiddenHttpException If the user may not edit any site.
      * @throws InvalidConfigException If the site cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function resolveSiteId(mixed $requested): int

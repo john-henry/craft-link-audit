@@ -173,7 +173,7 @@
             siteId: { type: 'select', heading: 'Site'|t('link-audit'), options: siteOptions, thin: true },
         }) %}
     {% endif %}
-    {% set uriPatternInfo = 'A regular expression, tested against the URI with no leading slash. A blank pattern matches the homepage.'|t('link-audit')
+    {% set uriPatternInfo = 'A regular expression, tested against the URI with no leading slash. The homepage is `^$`.'|t('link-audit')
         ~ "\n\n" ~ '`.*` matches everything.'|t('link-audit')
         ~ "\n\n" ~ '`^news/` matches everything under news.'|t('link-audit')
         ~ "\n\n" ~ '`archive$` matches anything ending in archive.'|t('link-audit')
@@ -184,7 +184,7 @@
             type: 'singleline',
             heading: 'URI Pattern'|t('link-audit'),
             info: uriPatternInfo,
-            placeholder: 'Leave blank to match the homepage'|t('link-audit'),
+            placeholder: '^news/'|t('link-audit'),
             code: true,
         },
     }) %}
@@ -198,6 +198,7 @@
         cols: uriCols,
         rows: settings.excludedUriPatterns,
         addRowLabel: 'Add a URI pattern'|t('link-audit'),
+        defaultValues: { enabled: true },
         warning: config.excludedUriPatterns is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
         allowAdd: not (config.excludedUriPatterns is defined),
         allowDelete: not (config.excludedUriPatterns is defined),

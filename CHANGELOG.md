@@ -1,6 +1,88 @@
 # Release Notes for Link Audit
 
-## Unreleased
+## 1.0.0-beta.8 - 2026-09-22
+
+### Added
+- A Getting started pane on the Overview, shown until the first scan has run. A fresh install used to
+  open on a screen of zeros with nothing on it saying what to do about that. It now walks through the
+  three steps in order: run a full scan, leave it to the queue, then work from the top of the report. It
+  says plainly that the scan runs in the background, so there is no need to sit watching the page, and
+  where your account is not allowed to run scans it says so rather than leaving you wondering where the
+  button went.
+- A Using the Dashboard guide in the documentation, with a short video walkthrough, linked from that
+  pane.
+
+### Fixed
+- The example config file now shows the editable tables as well: ignore patterns, ignored hosts, the
+  bot-hostile host list, excluded URI patterns and the always-valid internal patterns. All five could
+  always be pinned in `config/link-audit.php`, and the control panel has always said so when they were,
+  but the file you copy to do it did not show them, and the row shape is not something anybody guesses.
+- The Broken Links widget can no longer take the dashboard down with it. Craft asks a widget to draw
+  itself without catching anything, so a template that would not render, after a part-finished deploy
+  say, stopped the whole dashboard loading for everybody who had the tile, including the page they would
+  have used to remove it. The tile now goes quiet on its own and the reason goes in the log.
+- `link-audit/scan/report` no longer takes a `--site` it was never going to use. The report covers the
+  whole install, but the option was listed all the same, so passing one did nothing and passing a
+  mistyped one did nothing quietly: the report came out looking right and the command said it worked.
+  It is refused now, the way an option nobody offers should be.
+- The address guard now reads an IPv4 address written inside an IPv6 one. There are three ways of doing
+  that, and the guard was judging the outside of the address rather than the machine it reaches, so on a
+  network carrying NAT64 or 6to4 a link could have been followed to somewhere on your own side of the
+  firewall. Multicast, broadcast and the documentation ranges are turned away now as well.
+- The recheck and retention windows are now capped as well as floored. They are turned into a length of
+  time to work out when a URL is next due, and a number big enough stops being one: the setting saved
+  fine and the next check threw instead of being scheduled. Ten years of days and a year of hours, which
+  is past anything anybody means by leaving something alone.
+- The page crawl step no longer restarts itself on a slow site. It fetches twenty pages one after another
+  and the queue holds a job for five minutes by default, which twenty pages at the default timeout
+  already goes past. When it did, the queue handed the job on and the same twenty pages were crawled
+  again from the top, over and over, while the scan sat still. The step now asks for as long as the
+  fetching can actually take.
+- The Connect Timeout setting now applies when pages are crawled. The crawler was asking for the response
+  a way that quietly has no connect timeout at all, so a host that accepts a connection and then says
+  nothing cost the full request timeout on every page instead of the few seconds you set. Nothing else
+  about the crawl changes: the same cap on how much of a page is read still applies.
+- The URL detail page now keeps its place in the sidebar. Opening a URL from any of the lists left every
+  entry in the Link Audit menu unlit, so there was nothing to tell you which list you had come out of.
+- The plugin's settings now fire Craft's `defineRules` event, so a module can add its own validation to
+  them. The settings model was declaring its rules in a way that skipped the event, so a handler you
+  attached to it ran against nothing and your rule was never applied.
+- Ignored URL Patterns, Ignored Hosts and Excluded URI Patterns now switch a newly added row on. The "On"
+  switch on a fresh row was starting off, so a pattern or host you typed in and saved came back looking
+  right and was then passed over by every scan, with nothing to tell you why. Rows you already had are
+  untouched.
+- The Excluded URI Patterns help said a blank pattern matched the homepage. A blank row was never saved,
+  so that was never a thing you could do from the settings screen. The homepage is `^$`, and the help now
+  says so.
+- Fixed the CSV export writing broken line endings when Craft runs on Windows. The file is written with
+  the CRLF endings a spreadsheet expects, but the handle it went through was rewriting them again on the
+  way out, so every row ended up with a stray carriage return. Nothing changes on Linux or macOS.
+- `link-audit/scan/element` says so when there is no element with that id, or when the one there is has
+  been excluded from the audit. It used to report "0 links stored" in green either way, which reads as a
+  page that was read and had nothing on it.
+- A pattern that is not a valid regular expression is refused when you save it, in all three settings
+  that take one: Ignored URL Patterns, Excluded URI Patterns and Always Valid Internal URLs. A pattern
+  that will not compile never matches, so until now the row saved without complaint and then quietly did
+  nothing: an ignore that ignored nothing went on reporting the links it was written to quiet, and an
+  exclusion that excluded nothing went on scanning the pages it was written to leave alone. A row you
+  have switched off is left alone, so a half-written rule can still be parked.
+- The count beside Ignored is brought up to date when the sweep that removes URLs nothing points at
+  removes one that was ignored. Running the prune left the badge showing the old number for up to a
+  minute, which read as the command having done nothing.
+- A check run now tells the queue how long it may actually need, rather than letting it assume five
+  minutes. On a slower setting, a run of a hundred links could take far longer than that, and a job that
+  outlives its time to run is handed to the next worker from the start: every one of those links asked
+  again, and again, with the run never finishing. Raising the timeout or lowering how many run at once
+  no longer has that effect.
+- Two checks landing on the same link at the same time no longer lose each other's count of consecutive
+  failures. A scheduled scan, a rendered crawl and the Check again button all write the same row, and
+  each worked its count out from what it read before the other wrote, which could hold a link one check
+  short of being called broken. The write now only lands if the row still holds what was read, and reads
+  again if it does not.
+- Saving or restoring a page can no longer be refused because the plugin could not queue its reread. The
+  hook runs inside the save itself, so anything that went wrong there came back to the author as a
+  failed save of their own content. A reread that was not queued is picked up by the next scan. Deleting
+  a page already worked this way.
 
 ### Changed
 - The check that stops a scan fetching a private or internal address, and the name lookup behind it,

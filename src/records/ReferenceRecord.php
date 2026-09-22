@@ -31,7 +31,7 @@ use craft\db\ActiveRecord;
  * @property string|null $linkText
  * @property string|null $rawHref
  * @property int|null $scanId
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ReferenceRecord extends ActiveRecord
@@ -44,7 +44,7 @@ class ReferenceRecord extends ActiveRecord
      * @inheritdoc
      *
      * @return string The table name.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function tableName(): string

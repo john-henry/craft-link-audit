@@ -44,7 +44,7 @@ use yii\base\Component;
  * into the client, so an injected bare client behaves exactly like the built-in
  * one.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class HttpChecker extends Component
@@ -102,7 +102,7 @@ class HttpChecker extends Component
      *
      * @param string $url The absolute, normalised URL to check.
      * @return Verdict What the URL had to say for itself.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function check(string $url): Verdict
@@ -122,7 +122,7 @@ class HttpChecker extends Component
      *
      * @param string $url The absolute, normalised URL to check.
      * @return PromiseInterface A promise fulfilled with a {@see Verdict}.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function checkAsync(string $url): PromiseInterface
@@ -155,7 +155,7 @@ class HttpChecker extends Component
      * The HTTP client requests go out on.
      *
      * @return ClientInterface The client.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getClient(): ClientInterface
@@ -175,7 +175,7 @@ class HttpChecker extends Component
      *
      * @param ClientInterface $client The client to use.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function setClient(ClientInterface $client): void
@@ -196,7 +196,7 @@ class HttpChecker extends Component
      * @param Verdict $verdict The verdict the status code alone suggested.
      * @param string $signature The bot-block signature that matched.
      * @return Verdict The recast verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _blockedVerdict(Verdict $verdict, string $signature): Verdict
@@ -225,7 +225,7 @@ class HttpChecker extends Component
      * @param string|null $bodySnippet The first couple of kilobytes of the body,
      *                                 when a GET provided one.
      * @return string|null The signature that matched.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _blockSignature(
@@ -257,7 +257,7 @@ class HttpChecker extends Component
      * @param ResponseInterface $response The response.
      * @return string|null The snippet, or null when there was nothing worth
      *                     reading.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _bodySnippet(ResponseInterface $response): ?string
@@ -292,7 +292,7 @@ class HttpChecker extends Component
      * @param string|null $finalUrl Where a redirect chain ended up.
      * @param Verdict $verdict The verdict as the checker sees it.
      * @return Verdict Whatever the listeners left behind.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _defineVerdict(
@@ -330,7 +330,7 @@ class HttpChecker extends Component
      *
      * @param UnsafeUrlException $e The refusal.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _guardRefusal(UnsafeUrlException $e): Verdict
@@ -366,7 +366,7 @@ class HttpChecker extends Component
      * @param string $method The request method that failed.
      * @param int $elapsedMs How long it took to fail.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _mapError(Throwable $error, string $method, int $elapsedMs): Verdict
@@ -429,7 +429,7 @@ class HttpChecker extends Component
      * @param string $method The request method that produced it.
      * @param int $elapsedMs How long it took.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _mapResponse(ResponseInterface $response, string $method, int $elapsedMs): Verdict
@@ -502,7 +502,7 @@ class HttpChecker extends Component
      *
      * @param string $message The error's message.
      * @return string One of the {@see Verdict} REASON_* constants.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _reasonForError(string $message): string
@@ -534,7 +534,7 @@ class HttpChecker extends Component
      *
      * @param ResponseInterface $response The response.
      * @return string The phrase.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _reasonPhrase(ResponseInterface $response): string
@@ -561,7 +561,7 @@ class HttpChecker extends Component
      * @return array{0: int, 1: string|null, 2: bool, 3: int|null} The hop count,
      *         the final URL, whether any hop was permanent, and the first hop's
      *         status code.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _redirectInfo(ResponseInterface $response): array
@@ -597,7 +597,7 @@ class HttpChecker extends Component
      * @param ResponseInterface $response The response.
      * @return int|null The delay in seconds, or null when the header is missing
      *                  or unreadable.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _retryAfterSeconds(ResponseInterface $response): ?int
@@ -629,7 +629,7 @@ class HttpChecker extends Component
      *
      * @param string $method The request method.
      * @return array<string, mixed> The options.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _requestOptions(string $method): array
@@ -675,7 +675,7 @@ class HttpChecker extends Component
      * @param string $method The request method.
      * @return PromiseInterface A promise fulfilled with an outcome array of
      *         `method`, `response`, `error` and `elapsedMs`.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _send(string $url, string $method): PromiseInterface
@@ -708,7 +708,7 @@ class HttpChecker extends Component
      * @param array{method: string, response: ResponseInterface|null, error: Throwable|null, elapsedMs: int} $outcome
      *        What came back.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _verdictFor(string $url, array $outcome): Verdict
@@ -771,7 +771,7 @@ class HttpChecker extends Component
      * @param array{method: string, response: ResponseInterface|null, error: Throwable|null, elapsedMs: int} $outcome
      *        What came back from the HEAD.
      * @return bool Whether to try a GET.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _worthOneGet(string $url, array $outcome): bool

@@ -680,3 +680,68 @@ it('stops without a fuss when there is nothing waiting to be checked', function(
         ->and($job->itemOffset)->toBe(0)
         ->and($job->totalChunks)->toBe(0);
 });
+
+// ---------------------------------------------------------------------------
+// Knowing when to stop coming back
+//
+// The chunk count is pinned when the run starts so it cannot shrink underneath
+// the job. The pending set very much can: a concurrent scan, an on-save
+// reread, somebody ignoring a URL, an element being deleted. Once the rows are
+// gone the runner would keep spawning a copy of the job for every chunk the
+// pinned total still promises, each one handing back nothing, for ever.
+//
+// isExhausted() is what stops that, and nothing was asking it to.
+// ---------------------------------------------------------------------------
+
+it('says it is exhausted once there is nothing above the cursor', function() {
+    $ids = laPendingUrls(3);
+    $store = LinkAudit::getInstance()->getUrlStore();
+
+    // A cursor past every row: the shape left behind when the rows a pinned
+    // total still counts have since left the pending set.
+    $batcher = new ChunkedUrlBatcher($store->pendingQuery()->andWhere(['id' => $ids]), 3, max($ids));
+
+    expect($batcher->isExhausted())->toBeFalse();
+
+    $chunks = iterator_to_array($batcher->getSlice(0, 5));
+
+    expect($chunks)->toBe([])
+        ->and($batcher->isExhausted())->toBeTrue();
+});
+
+it('does not say so while rows are still coming', function() {
+    // The other half: claiming exhaustion early would stop a run with work
+    // left in it, which is the quieter and worse failure of the two.
+    $ids = laPendingUrls(6);
+    $store = LinkAudit::getInstance()->getUrlStore();
+    $batcher = new ChunkedUrlBatcher($store->pendingQuery()->andWhere(['id' => $ids]), 3);
+
+    $chunks = iterator_to_array($batcher->getSlice(0, 1));
+
+    expect($chunks)->toHaveCount(1)
+        ->and($batcher->isExhausted())->toBeFalse();
+});
+
+it('winds the job past its pinned total so the chain stops', function() {
+    // The end of it: Craft spawns the next job while itemOffset < totalItems(),
+    // so this is the line between stopping and spawning for ever.
+    $ids = laPendingUrls(3);
+
+    $job = new CheckUrls([
+        'scanId' => 0,
+        'chunkSize' => 3,
+        'cursorId' => max($ids),
+        'totalChunks' => 5,
+    ]);
+
+    $data = new ReflectionMethod($job, 'data');
+    $batcher = $data->invoke($job);
+
+    iterator_to_array($batcher->getSlice(0, 1));
+
+    expect($batcher->isExhausted())->toBeTrue();
+
+    (new ReflectionMethod($job, 'afterBatch'))->invoke($job);
+
+    expect($job->itemOffset)->toBeGreaterThanOrEqual(5);
+});

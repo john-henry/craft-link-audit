@@ -41,7 +41,7 @@ use johnhenry\linkaudit\enums\SchemeKind;
  * skippable scheme and a href too broken to parse; the classification is what
  * tells the two apart.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class UrlNormaliser
@@ -114,7 +114,7 @@ class UrlNormaliser
      *
      * @param string $url The raw href, exactly as it appeared in the content.
      * @return SchemeKind What the scheme means to the checker.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function classifyScheme(string $url): SchemeKind
@@ -147,7 +147,7 @@ class UrlNormaliser
      *
      * @param string $url The URL to read.
      * @return string|null The fragment, without its leading hash.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function fragmentOf(string $url): ?string
@@ -164,7 +164,7 @@ class UrlNormaliser
      * @param string $normalisedUrl A URL that has already been through
      *                              {@see self::normalise()}.
      * @return string The 40 character hash.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function hash(string $normalisedUrl): string
@@ -177,7 +177,7 @@ class UrlNormaliser
      *
      * @param string $url The URL to read.
      * @return string The host.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function hostOf(string $url): string
@@ -202,7 +202,7 @@ class UrlNormaliser
      * @param string[] $baseUrls The base URLs of every site to count as
      *                           internal.
      * @return bool Whether the URL belongs to one of those sites.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function isInternal(string $url, array $baseUrls): bool
@@ -236,7 +236,7 @@ class UrlNormaliser
      * @return string|null The normalised URL, or null when there is nothing to
      *                     check. Call {@see self::classifyScheme()} to tell a
      *                     skippable href from an unparseable one.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function normalise(
@@ -300,7 +300,7 @@ class UrlNormaliser
      *
      * @param string $url The URL to read.
      * @return string The scheme.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function schemeOf(string $url): string
@@ -315,7 +315,7 @@ class UrlNormaliser
      *
      * @param string $url The URL to strip.
      * @return string The URL, fragment and all removed.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function stripFragment(string $url): string
@@ -344,7 +344,7 @@ class UrlNormaliser
      * @param string $rawHref The href it came from, fragment and all.
      * @return string The URL, with the fragment on it when there was one worth
      *                keeping.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function withFragment(string $normalisedUrl, string $rawHref): string
@@ -371,7 +371,7 @@ class UrlNormaliser
      * @param string|null $baseUrl The base URL, if there is one.
      * @return string|null The absolute URL, or null when the reference needs a
      *                     base URL and none is usable.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _absolutise(string $reference, ?string $baseUrl): ?string
@@ -429,7 +429,7 @@ class UrlNormaliser
      *
      * @param string $url The raw href.
      * @return string The cleaned href.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _clean(string $url): string
@@ -446,7 +446,7 @@ class UrlNormaliser
      * @param string $url The URL to read.
      * @return string|null The comparable authority, or null when the URL has no
      *                     host.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _comparableAuthority(string $url): ?string
@@ -478,7 +478,7 @@ class UrlNormaliser
      *
      * @param string $name The raw parameter name.
      * @return bool Whether it should be dropped.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _isTrackingParam(string $name): bool
@@ -512,7 +512,7 @@ class UrlNormaliser
      * @param string $host The host as parsed.
      * @return string The normalised host, or an empty string when there is
      *                nothing usable.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _normaliseHost(string $host): string
@@ -540,7 +540,7 @@ class UrlNormaliser
      *
      * @param string $path The path as parsed.
      * @return string The normalised path.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _normalisePath(string $path): string
@@ -561,7 +561,7 @@ class UrlNormaliser
      *
      * @param string $value The path or query to normalise.
      * @return string The normalised value.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _normalisePercentEncoding(string $value): string
@@ -594,7 +594,7 @@ class UrlNormaliser
      * @param string|null $query The query as parsed.
      * @param bool $stripTrackingParams Whether tracking parameters are dropped.
      * @return string|null The normalised query, or null when nothing is left.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _normaliseQuery(?string $query, bool $stripTrackingParams): ?string
@@ -628,7 +628,7 @@ class UrlNormaliser
      *
      * @param string $path The path to flatten.
      * @return string The flattened path.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _removeDotSegments(string $path): string
@@ -671,7 +671,7 @@ class UrlNormaliser
      *
      * @param array<string, mixed> $parts The output of `parse_url()`.
      * @return string The userinfo portion.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _userInfo(array $parts): string

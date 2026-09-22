@@ -56,7 +56,7 @@ use yii\db\Expression;
  * {@see UrlStore} does: nothing in here is date arithmetic for its own sake, it
  * is all a column on its way in or out of the database.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ScanService extends Component
@@ -116,7 +116,7 @@ class ScanService extends Component
      * @return ScanRecord|null The scan that was called off, or null when nothing
      *                         was running.
      * @throws InvalidConfigException If the queue component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function cancelScan(): ?ScanRecord
@@ -182,7 +182,7 @@ class ScanService extends Component
      *             were offered.
      * @throws Exception If a time to live setting cannot be turned into an
      *                   interval.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function checkChunk(array $rows, ?int $scanId = null): int
@@ -281,7 +281,7 @@ class ScanService extends Component
      * @param int $scanId The scan being carried on.
      * @param int[] $siteIds The sites it covers.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function continueAfterExtraction(int $scanId, array $siteIds): void
@@ -313,7 +313,7 @@ class ScanService extends Component
      * @param int[]|null $elementIds Only these elements, for a rescan of a known
      *                               set.
      * @return Query The query, ordered so that paging cannot skip a row.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function elementQuery(
@@ -388,7 +388,7 @@ class ScanService extends Component
      * @return int|null How many links were found, or null when the element was
      *                  skipped.
      * @throws Throwable If the reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function extractElement(
@@ -487,7 +487,7 @@ class ScanService extends Component
      * @param int|null $scanId The scan to stamp the reference rows with.
      * @return int How many links were found.
      * @throws Throwable If the reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function extractNavigation(array $siteIds, ?int $scanId = null): int
@@ -563,7 +563,7 @@ class ScanService extends Component
      * @param int $scanId The scan to close.
      * @return void
      * @throws Throwable If the tidy up cannot be completed.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function finalise(int $scanId): void
@@ -611,7 +611,7 @@ class ScanService extends Component
      * @param int $scanId The scan to read.
      * @return array<string, mixed>|null The row, or null when there is no such
      *                                   scan.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getScan(int $scanId): ?array
@@ -639,7 +639,7 @@ class ScanService extends Component
      * @param int $siteId The site it is being edited on.
      * @return int How many URLs will be asked again.
      * @throws Throwable If the element's reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function recheckElementLinks(int $elementId, int $siteId): int
@@ -682,7 +682,7 @@ class ScanService extends Component
      * @param ElementInterface $element The element about to be read, or the
      *                                  target of a link about to be judged.
      * @return bool Whether it is excluded.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isContainerExcluded(ElementInterface $element): bool
@@ -710,7 +710,7 @@ class ScanService extends Component
      *                         mean the homepage.
      * @param int $siteId The site the URI belongs to.
      * @return bool Whether the element is excluded.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isUriExcluded(?string $uri, int $siteId): bool
@@ -765,7 +765,7 @@ class ScanService extends Component
      *
      * @return DateTimeInterface|null The moment, or null when nothing has
      *                                completed yet.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function lastCompletedScanStart(): ?DateTimeInterface
@@ -799,7 +799,7 @@ class ScanService extends Component
      * @param int $scanId The scan to move.
      * @param ScanStatus $status The phase it is entering.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function markStatus(int $scanId, ScanStatus $status): void
@@ -837,7 +837,7 @@ class ScanService extends Component
      * table is what every check phase is writing to.
      *
      * @return int How many rows went.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function pruneOrphanUrls(): int
@@ -861,7 +861,7 @@ class ScanService extends Component
                 ->column();
 
             if ($ids === []) {
-                return $deleted;
+                break;
             }
 
             $deleted += $db->createCommand()
@@ -871,9 +871,19 @@ class ScanService extends Component
             // A short batch is the last one, so the next read is not worth the
             // round trip.
             if (count($ids) < self::_ORPHAN_BATCH_SIZE) {
-                return $deleted;
+                break;
             }
         }
+
+        // Invalidated here rather than at the call sites. The scan path already
+        // does it for reasons of its own, but the prune command is a caller
+        // too, and somebody who runs it to tidy up and then looks at the report
+        // should not be shown the numbers it was run to correct.
+        if ($deleted > 0) {
+            LinkAudit::$plugin->getReportService()->invalidateCounts();
+        }
+
+        return $deleted;
     }
 
     /**
@@ -895,7 +905,7 @@ class ScanService extends Component
      * @param int|null $siteId The site it covered, or null when it covered them
      *                         all.
      * @return int How many rows went.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function pruneStaleReferences(int $scanId, ?int $siteId = null): int
@@ -922,7 +932,7 @@ class ScanService extends Component
      * @param int $checked How many URLs got a verdict.
      * @param int $broken How many of them turned out to be broken.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function recordCheckProgress(int $scanId, int $checked, int $broken): void
@@ -936,7 +946,7 @@ class ScanService extends Component
      * @param int $scanId The scan to count against.
      * @param int $count How many elements were read.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function recordElementsScanned(int $scanId, int $count): void
@@ -950,7 +960,7 @@ class ScanService extends Component
      * @param int $scanId The scan to count against.
      * @param int $count How many pages were fetched and read.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function recordPagesCrawled(int $scanId, int $count): void
@@ -976,7 +986,7 @@ class ScanService extends Component
      *                         this is part of one.
      * @return int How many links were found across every site.
      * @throws Throwable If the reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function refreshElement(int $elementId, ?int $scanId = null): int
@@ -1039,7 +1049,7 @@ class ScanService extends Component
      *
      * @return array<string, int> How many rows went, per table.
      * @throws InvalidConfigException If the queue component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function resetAll(): array
@@ -1090,7 +1100,7 @@ class ScanService extends Component
      * schedule for good.
      *
      * @return ScanRecord|null The scan queued, or null when none was due.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function runScheduledScan(): ?ScanRecord
@@ -1137,15 +1147,22 @@ class ScanService extends Component
      * Synchronous by design: this is what a console command and the on-save hook
      * want, and one element is not worth three queue jobs.
      *
+     * Null and zero are different answers. Zero is a page that was read and
+     * carries no links; null is a page that was not read at all, because no
+     * element with that id lives on the sites asked about, or because every one
+     * of them is excluded from the audit. A caller that cannot tell those apart
+     * reports an element nobody looked at as an element with nothing on it.
+     *
      * @param int $elementId The element to read.
      * @param int|null $siteId The site to read it on, or null for every site the
      *                         element lives on.
-     * @return int How many links were found.
+     * @return int|null How many links were found, or null where the element was
+     *                  read on no site at all.
      * @throws Throwable If the reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    public function scanElement(int $elementId, ?int $siteId = null): int
+    public function scanElement(int $elementId, ?int $siteId = null): ?int
     {
         $scan = $this->_createScan(ScanMode::Single, $siteId);
         $scanId = (int)$scan->id;
@@ -1168,7 +1185,7 @@ class ScanService extends Component
         $this->recordElementsScanned($scanId, $scanned);
         $this->finalise($scanId);
 
-        return $found;
+        return $scanned === 0 ? null : $found;
     }
 
     /**
@@ -1176,7 +1193,7 @@ class ScanService extends Component
      *
      * @param int|null $siteId One site, or null for every site.
      * @return int[] The site ids.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function siteIds(?int $siteId = null): array
@@ -1206,7 +1223,7 @@ class ScanService extends Component
      * @return ScanRecord The scan row.
      * @throws ScanInProgressException If a run that reads content was asked for
      *                                 while one is already going.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function startScan(ScanMode $mode, ?int $siteId = null): ScanRecord
@@ -1251,7 +1268,7 @@ class ScanService extends Component
      * @param ScanMode $mode What the run is for.
      * @param int|null $siteId The site it covers.
      * @return ScanRecord The saved row.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _createScan(ScanMode $mode, ?int $siteId): ScanRecord
@@ -1276,7 +1293,7 @@ class ScanService extends Component
      * @param int $scanId The scan to move.
      * @param array<string, int> $columns The columns to add to, and by how much.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _increment(int $scanId, array $columns): void
@@ -1316,7 +1333,7 @@ class ScanService extends Component
      *
      * @return DateTimeInterface|null The moment, or null when nothing has ever
      *                                run.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _lastScanStart(): ?DateTimeInterface
@@ -1352,7 +1369,7 @@ class ScanService extends Component
      * @param string $pattern The pattern from the settings.
      * @param string $subject The normalised URI.
      * @return bool Whether it matches.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _matchesPattern(string $pattern, string $subject): bool
@@ -1377,7 +1394,7 @@ class ScanService extends Component
      *
      * @param array<string, mixed> $scan The scan that just finished.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _notify(array $scan): void
@@ -1410,7 +1427,7 @@ class ScanService extends Component
      * Nothing happens at all while the crawl is on, which is the usual case.
      *
      * @return int How many rows went.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _pruneRenderedReferences(): int
@@ -1438,7 +1455,7 @@ class ScanService extends Component
      * @param int|null $siteId The site the scan covered, or null for a run that
      *                         covered every site.
      * @return int The count.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _referencedBrokenCount(?int $siteId): int
@@ -1481,7 +1498,7 @@ class ScanService extends Component
      * @return Verdict|null The verdict, or null when the row is an internal URL
      *                      the database cannot answer for, so it belongs to the
      *                      HTTP check phase rather than a database lookup.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _resolveStored(array $row): ?Verdict
@@ -1520,7 +1537,7 @@ class ScanService extends Component
      *
      * @param array<string, mixed> $row The URL row.
      * @return string The URL to request.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _fetchUrlFor(array $row): string
@@ -1555,7 +1572,7 @@ class ScanService extends Component
      * @param DateTimeInterface $cutOff The moment before which a running scan is
      *                                  treated as abandoned.
      * @return int|null The scan id, or null when nothing is running.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _runningScanId(DateTimeInterface $cutOff): ?int
@@ -1583,7 +1600,7 @@ class ScanService extends Component
      * @param DateTimeInterface $cutOff The moment before which a running scan is
      *                                  treated as abandoned.
      * @return bool Whether something is already running.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _scanInProgress(DateTimeInterface $cutOff): bool
@@ -1596,7 +1613,7 @@ class ScanService extends Component
      *
      * @param int $scanId The scan.
      * @return int The count.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _scannedUrlCount(int $scanId): int
@@ -1613,7 +1630,7 @@ class ScanService extends Component
      * The plugin's settings.
      *
      * @return SettingsModel The settings.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _settings(): SettingsModel

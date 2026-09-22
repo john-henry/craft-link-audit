@@ -25,7 +25,7 @@ use johnhenry\linkaudit\services\ServicesTrait;
  * pays for what has gone stale.
  *
  * @property-read SettingsModel $settings
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class LinkAudit extends BasePlugin
@@ -83,7 +83,7 @@ class LinkAudit extends BasePlugin
      * @inheritdoc
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function init(): void

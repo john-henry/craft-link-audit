@@ -5,10 +5,16 @@
  *
  * Copy this file to config/link-audit.php in your project to pin any plugin
  * setting from code. Values set here take precedence over the control panel
- * settings screen, where the matching field is shown read-only with an
- * "Overridden by config file" note. Uncomment only the keys you want to fix;
- * anything left commented keeps its default (shown below) and stays editable
- * in the CP.
+ * settings screen, where the matching field is shown read-only with a note
+ * naming this file. Uncomment only the keys you want to fix; anything left
+ * commented stays editable in the control panel.
+ *
+ * Most keys below show their own default, so uncommenting one changes nothing
+ * until you edit the value. The ones whose default is empty show an example
+ * instead, because an empty value says nothing about the shape it wants: the
+ * environment variable references and every one of the tables are examples to
+ * edit, not defaults to put back. Uncomment one of those as it stands and you
+ * have set it to what the example says.
  */
 
 return [
@@ -56,6 +62,24 @@ return [
     // Strip utm_*, fbclid, gclid and friends before hashing a URL.
     // 'stripTrackingParams' => true,
 
+    // The editable tables, as rows. Pinning one here makes the whole table
+    // read-only in the control panel, so give it every row you want, not just
+    // the ones you are adding.
+    //
+    // Pages kept out of the scan by URI. `uriPattern` is a regular expression
+    // tested against the URI with no leading slash; the homepage is `^$`. An
+    // empty `siteId` means every site.
+    // 'excludedUriPatterns' => [
+    //     ['enabled' => true, 'siteId' => '', 'uriPattern' => '^checkout'],
+    // ],
+
+    // Internal URLs always treated as valid, whatever the resolver makes of
+    // them. For a route your own code answers that Craft does not know about.
+    // 'internalUrlAllowPatterns' => [
+    //     ['pattern' => '^/api/', 'note' => 'Answered by a module.'],
+    // ],
+
+
     // HTTP
     // -------------------------------------------------------------------------
     // 'concurrency' => 10,
@@ -80,6 +104,28 @@ return [
 
     // Outbound proxy. Supports environment variables.
     // 'proxy' => '$LINK_AUDIT_PROXY',
+
+    // Ignores
+    // -------------------------------------------------------------------------
+    // URLs matching one of these are never checked and are reported as ignored
+    // rather than broken. `pattern` is a regular expression tested against the
+    // whole URL, scheme and all.
+    // 'ignorePatterns' => [
+    //     ['enabled' => true, 'pattern' => '^https://staging\\.', 'note' => 'Staging.'],
+    // ],
+
+    // Whole hosts nobody wants checked. A subdomain of a listed host counts as
+    // the host.
+    // 'ignoreHosts' => [
+    //     ['enabled' => true, 'host' => 'example.com', 'note' => ''],
+    // ],
+
+    // Hosts known to refuse robots, so a refusal from one is reported as
+    // unverifiable rather than broken. One column: every string is read as a
+    // host.
+    // 'botHostileHosts' => [
+    //     ['host' => 'www.linkedin.com'],
+    // ],
 
     // Caching and retention
     // -------------------------------------------------------------------------

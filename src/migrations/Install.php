@@ -23,7 +23,7 @@ use johnhenry\linkaudit\records\UrlRecord;
  * already exists. The URLs table is created before the references table, since
  * the latter carries a foreign key to it.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class Install extends Migration
@@ -36,7 +36,7 @@ class Install extends Migration
      * @inheritdoc
      *
      * @return bool Whether the migration succeeded.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function safeUp(): bool
@@ -59,7 +59,7 @@ class Install extends Migration
      * and the scans tables, so it goes first.
      *
      * @return bool Whether the migration succeeded.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function safeDown(): bool
@@ -84,7 +84,7 @@ class Install extends Migration
      * cached verdict.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _createUrlsTable(): void
@@ -162,7 +162,7 @@ class Install extends Migration
      * Creates the references table: every place a URL appears.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _createReferencesTable(): void
@@ -218,7 +218,7 @@ class Install extends Migration
      * Creates the scans table: one row per scan run.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _createScansTable(): void
@@ -272,7 +272,7 @@ class Install extends Migration
      * rows.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _createIgnoresTable(): void
@@ -308,7 +308,7 @@ class Install extends Migration
      * Creates the hosts table: durable per-domain throttle and backoff state.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _createHostsTable(): void

@@ -1,38 +1,6 @@
-{% extends '_layouts/cp' %}
+{% extends 'link-audit/_layouts/status-page' %}
 
 {% set title = 'Redirects'|t('link-audit') %}
 {% set selectedSubnavItem = 'redirects' %}
-{% set crumbs = [
-    { label: 'Link Audit'|t('link-audit'), url: cpUrl('link-audit') },
-    { label: title },
-] %}
-
-{% if sites|length > 1 %}
-    {% set crumbs = [{
-        id: 'site-crumb',
-        icon: 'world',
-        label: site.name|t('site'),
-        menu: { items: siteMenuItems(sites, site), label: 'Select site'|t('app') },
-    }]|merge(crumbs) %}
-{% endif %}
-
-{% block content %}
-    <p class="light">
-        {{ 'These all still work, so nobody is landing on an error. URL is the address as it is written in your content, and Goes To is where the server actually sends anybody who follows it. A permanent one is worth tidying up anyway: the page it points at has moved for good and your content is still carrying the old address. Copy what is in the Goes To column into the link and it stops being a detour.'|t('link-audit') }}
-    </p>
-
-    {% include 'link-audit/_includes/url-table' with {
-        verdict: verdict,
-        siteId: siteId,
-        siteHandle: siteHandle,
-        filters: filters,
-        hostOptions: hostOptions,
-        elementTypeOptions: elementTypeOptions,
-        sourceOptions: sourceOptions,
-        perPage: perPage,
-        total: total,
-        canRecheck: canRecheck,
-        canIgnore: canIgnore,
-        emptyMessage: 'No redirects on this site. Every link goes where it says it goes.'|t('link-audit'),
-    } only %}
-{% endblock %}
+{% set blurb = 'These all still work, so nobody is landing on an error. URL is the address as it is written in your content, and Goes To is where the server actually sends anybody who follows it. A permanent one is worth tidying up anyway: the page it points at has moved for good and your content is still carrying the old address. Copy what is in the Goes To column into the link and it stops being a detour.'|t('link-audit') %}
+{% set emptyMessage = 'No redirects on this site. Every link goes where it says it goes.'|t('link-audit') %}

@@ -33,7 +33,7 @@ use Generator;
  * and a generator means the cursor has only moved for the chunks that were
  * actually consumed.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ChunkedUrlBatcher implements Batchable
@@ -79,7 +79,7 @@ class ChunkedUrlBatcher implements Batchable
      *                        Passed in from the second batch onwards so that the
      *                        total does not shrink underneath the job as it
      *                        works.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function __construct(
@@ -95,7 +95,7 @@ class ChunkedUrlBatcher implements Batchable
      * @inheritdoc
      *
      * @return int How many chunks there are to work through.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function count(): int
@@ -111,7 +111,7 @@ class ChunkedUrlBatcher implements Batchable
      * starting over.
      *
      * @return int The cursor.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getCursorId(): int
@@ -129,7 +129,7 @@ class ChunkedUrlBatcher implements Batchable
      *                    this batcher pages.
      * @param int $limit How many chunks to hand over.
      * @return Generator<int, array<int, array<string, mixed>>> The chunks.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getSlice(int $offset, int $limit): Generator
@@ -165,7 +165,7 @@ class ChunkedUrlBatcher implements Batchable
      * knows there is nothing left to come back for.
      *
      * @return bool Whether the rows have run out.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isExhausted(): bool
@@ -181,7 +181,7 @@ class ChunkedUrlBatcher implements Batchable
      * How many URLs were waiting when this batcher was built.
      *
      * @return int The count.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _pendingCount(): int

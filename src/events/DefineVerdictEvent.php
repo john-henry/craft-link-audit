@@ -31,7 +31,7 @@ use yii\base\Event;
  * );
  * ```
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class DefineVerdictEvent extends Event

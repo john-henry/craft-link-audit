@@ -59,7 +59,7 @@ use yii\base\InvalidConfigException;
  * {@see ExtractedLink} objects, which the caller feeds to
  * {@see UrlStore::upsert()} and {@see UrlStore::replaceReferencesFor()}.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class LinkExtractor extends Component
@@ -116,7 +116,7 @@ class LinkExtractor extends Component
      * @param ElementInterface $element The element to read.
      * @return ExtractedLink[] The links found, in the order they were met.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function extract(ElementInterface $element): array
@@ -152,7 +152,7 @@ class LinkExtractor extends Component
      * @param int|null $siteId The site to read, or null for every site.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If a node is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function extractNavigationNodes(?int $siteId = null): array
@@ -215,7 +215,7 @@ class LinkExtractor extends Component
      *
      * @param int $siteId The site to look up.
      * @return string|null The base URL.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _baseUrlFor(int $siteId): ?string
@@ -255,7 +255,7 @@ class LinkExtractor extends Component
      *                         same URL-less element never share one verdict.
      * @return ExtractedLink The link.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _elementLink(
@@ -306,7 +306,7 @@ class LinkExtractor extends Component
             targetElementType: $target !== null ? $target::class : null,
             fieldUid: $field?->uid,
             fieldHandle: $field?->handle,
-            linkText: $this->_tidyText($linkText),
+            linkText: HtmlParser::tidyLinkText($linkText),
             source: $source,
         );
     }
@@ -341,7 +341,7 @@ class LinkExtractor extends Component
      * @param int $depth How far down the nesting this element sits.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _elementQueryLinks(
@@ -401,7 +401,7 @@ class LinkExtractor extends Component
      * @param int $depth How far down the nesting this element sits.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _fromElement(ElementInterface $element, int $ownerElementId, int $depth): array
@@ -455,7 +455,7 @@ class LinkExtractor extends Component
      * @param int $depth How far down the nesting this element sits.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _fromValue(
@@ -542,7 +542,7 @@ class LinkExtractor extends Component
      * @param int $depth How far down the nesting this element sits.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _htmlLinks(
@@ -623,7 +623,7 @@ class LinkExtractor extends Component
      *
      * @param HyperElementLink $link The link to read.
      * @return int|null The element id.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _hyperElementId(HyperElementLink $link): ?int
@@ -652,7 +652,7 @@ class LinkExtractor extends Component
      * @param int $ownerElementId The root element that owns the content.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _hyperLinks(
@@ -715,7 +715,7 @@ class LinkExtractor extends Component
      *
      * @param DOMNode $node The node to check.
      * @return bool Whether it is inside a nested entry placeholder.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _isInsideNestedEntry(DOMNode $node): bool
@@ -743,7 +743,7 @@ class LinkExtractor extends Component
      *
      * @param ElementInterface $element The nested element.
      * @return bool Whether it is enabled, globally and for its site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _isLive(ElementInterface $element): bool
@@ -764,7 +764,7 @@ class LinkExtractor extends Component
      * @return ExtractedLink|null The link, or null when there is nothing to
      *                            record.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _link(
@@ -827,7 +827,7 @@ class LinkExtractor extends Component
                 rawHref: $rawHref,
                 fieldUid: $field?->uid,
                 fieldHandle: $field?->handle,
-                linkText: $this->_tidyText($linkText),
+                linkText: HtmlParser::tidyLinkText($linkText),
                 source: $source,
             );
         }
@@ -852,7 +852,7 @@ class LinkExtractor extends Component
             rawHref: $rawHref,
             fieldUid: $field?->uid,
             fieldHandle: $field?->handle,
-            linkText: $this->_tidyText($linkText),
+            linkText: HtmlParser::tidyLinkText($linkText),
             source: $source,
         );
     }
@@ -865,7 +865,7 @@ class LinkExtractor extends Component
      * @param LinkData $value The stored value.
      * @return int|null The element id, or null when the value is not an element
      *                  reference.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _linkDataElementId(LinkData $value): ?int
@@ -884,7 +884,7 @@ class LinkExtractor extends Component
      *
      * @param LinkData $value The stored value.
      * @return string|null The label.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _linkDataLabel(LinkData $value): ?string
@@ -912,7 +912,7 @@ class LinkExtractor extends Component
      * @param int $ownerElementId The root element that owns the content.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _linkDataLinks(
@@ -960,7 +960,7 @@ class LinkExtractor extends Component
      *
      * @param LinkData $value The stored value.
      * @return string The stored value.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _linkDataRawValue(LinkData $value): string
@@ -979,7 +979,7 @@ class LinkExtractor extends Component
      * @param Node $node The node to read.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If the node is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _navNodeLinks(Node $node): array
@@ -1038,7 +1038,7 @@ class LinkExtractor extends Component
      *
      * @param Node $node The node to read.
      * @return string|null The URL, or null when there is nothing checkable.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _navNodeUrl(Node $node): ?string
@@ -1079,7 +1079,7 @@ class LinkExtractor extends Component
      * @param int $depth How far down the nesting this element sits.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _nestedEntryLinks(
@@ -1154,7 +1154,7 @@ class LinkExtractor extends Component
      * @param int $ownerElementId The root element that owns the content.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _plainTextLinks(
@@ -1197,7 +1197,7 @@ class LinkExtractor extends Component
      * @param string $refHandle The type segment of the tag, e.g. `entry`.
      * @return string|null The element class, or null when the handle is not
      *                     one this extractor resolves.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _referenceTagElementType(string $refHandle): ?string
@@ -1232,7 +1232,7 @@ class LinkExtractor extends Component
      * @return ExtractedLink|null The link, or null when neither the tag nor
      *                            its fallback is usable.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _referenceTagLink(
@@ -1296,7 +1296,7 @@ class LinkExtractor extends Component
      * @return array<int|string, string>|null The named capture groups, or
      *                                        null when the href is not a
      *                                        single reference tag.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _referenceTagMatch(string $rawHref): ?array
@@ -1325,7 +1325,7 @@ class LinkExtractor extends Component
      * @param ElementInterface $element The element the link was found in.
      * @return int The site id.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _referenceTagSiteId(?string $site, ElementInterface $element): int
@@ -1345,7 +1345,7 @@ class LinkExtractor extends Component
      * The plugin's settings.
      *
      * @return SettingsModel The settings.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _settings(): SettingsModel
@@ -1357,7 +1357,7 @@ class LinkExtractor extends Component
      * The base URL of every site that serves one, keyed by site id.
      *
      * @return array<int, string> The base URLs.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _siteBaseUrls(): array
@@ -1386,7 +1386,7 @@ class LinkExtractor extends Component
      * @param int $ownerElementId The root element that owns the content.
      * @return ExtractedLink[] The links found.
      * @throws InvalidConfigException If the element is not on a valid site.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _tableLinks(
@@ -1421,25 +1421,5 @@ class LinkExtractor extends Component
         }
 
         return array_merge([], ...$found);
-    }
-
-    /**
-     * Collapses the whitespace out of anchor text and clips it to something a
-     * report column can hold.
-     *
-     * @param string|null $text The text as it was found.
-     * @return string|null The tidied text, or null when there was none.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _tidyText(?string $text): ?string
-    {
-        if ($text === null) {
-            return null;
-        }
-
-        $tidied = trim((string)preg_replace('/\s+/u', ' ', $text));
-
-        return $tidied !== '' ? mb_substr($tidied, 0, 255) : null;
     }
 }

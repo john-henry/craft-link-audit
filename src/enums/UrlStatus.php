@@ -19,7 +19,7 @@ use Craft;
  * becomes broken once it has failed enough times in a row; and blocked means the
  * far end refuses robots, which is not the same as the link being wrong.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 enum UrlStatus: string
@@ -83,7 +83,7 @@ enum UrlStatus: string
      * amber because it is a maybe, not a failure.
      *
      * @return string The Craft status colour class.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function colour(): string
@@ -107,7 +107,7 @@ enum UrlStatus: string
      * say what happened.
      *
      * @return string The translated label.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function label(): string

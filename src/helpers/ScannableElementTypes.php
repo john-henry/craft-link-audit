@@ -30,7 +30,7 @@ use craft\elements\Tag;
  * ship: users, addresses and Commerce orders are all elements a big site has by
  * the hundred thousand and none of them is where an editor puts a link.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ScannableElementTypes
@@ -61,7 +61,7 @@ class ScannableElementTypes
      * ordered by label for a settings checklist.
      *
      * @return array<class-string, string> The types.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function all(): array
@@ -98,7 +98,7 @@ class ScannableElementTypes
      * are worth reading.
      *
      * @return class-string[] The types, minus any whose plugin is not installed.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function native(): array

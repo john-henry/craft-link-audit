@@ -25,7 +25,7 @@ use Throwable;
  * either add the host to the `botHostileHosts` setting or listen to
  * {@see \johnhenry\linkaudit\services\HttpChecker::EVENT_DEFINE_VERDICT}.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class BotBlockHeuristics
@@ -158,7 +158,7 @@ class BotBlockHeuristics
      *                                  non-2xx from which counts as a block.
      * @return string|null The SIGNATURE_* constant that matched, or null when
      *                     the response is the host's own honest answer.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function detect(
@@ -212,7 +212,7 @@ class BotBlockHeuristics
      *
      * @param array<int, mixed> $rows The setting value.
      * @return string[] The hosts, lowercased and trimmed.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function hostList(array $rows): array
@@ -252,7 +252,7 @@ class BotBlockHeuristics
      * @param Throwable $error The transport error.
      * @return bool Whether the far end answered with a status outside the
      *              standard range.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function isNonstandardStatusError(Throwable $error): bool
@@ -280,7 +280,7 @@ class BotBlockHeuristics
      * @param string $host The host to test.
      * @param string[] $hosts The configured hosts.
      * @return bool Whether the host is on the list.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function matchesHostList(string $host, array $hosts): bool
@@ -316,7 +316,7 @@ class BotBlockHeuristics
      * @param string $haystack The lowercased text to search.
      * @param string[] $markers The markers to look for.
      * @return bool Whether one of them is there.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _containsAny(string $haystack, array $markers): bool
@@ -340,7 +340,7 @@ class BotBlockHeuristics
      * @param string $host The host that was asked.
      * @param string|null $finalUrl Where the chain ended up.
      * @return bool Whether this is a login wall.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _isSocialLoginWall(string $host, ?string $finalUrl): bool
@@ -360,7 +360,7 @@ class BotBlockHeuristics
      * @param array<string, string[]> $headers The headers as Guzzle hands them
      *                                         over.
      * @return array<string, string> The flattened headers.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _normaliseHeaders(array $headers): array
@@ -381,7 +381,7 @@ class BotBlockHeuristics
      * @param string $body The lowercased body snippet, empty when there is none.
      * @param int $httpStatus The status code.
      * @return string|null The SIGNATURE_* constant that matched.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _vendorSignature(array $header, string $body, int $httpStatus): ?string
