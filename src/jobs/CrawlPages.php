@@ -89,7 +89,7 @@ class CrawlPages extends BaseBatchedJob
      *
      * @return void
      * @author John Henry Donovan <info@johnhenry.ie>
-     * @since 1.1.0
+     * @since 1.0.0
      */
     public function init(): void
     {
@@ -112,7 +112,7 @@ class CrawlPages extends BaseBatchedJob
      *
      * @return int Seconds.
      * @author John Henry Donovan <info@johnhenry.ie>
-     * @since 1.1.0
+     * @since 1.0.0
      */
     private function _worstCaseSeconds(): int
     {

@@ -53,7 +53,7 @@ class HtmlParser
      * @return string|null The tidied text, or null when there was none.
      *
      * @author John Henry Donovan <info@johnhenry.ie>
-     * @since 1.1.0
+     * @since 1.0.0
      */
     public static function tidyLinkText(?string $text): ?string
     {
