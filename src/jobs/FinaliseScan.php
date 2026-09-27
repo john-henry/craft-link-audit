@@ -29,6 +29,11 @@ class FinaliseScan extends BaseJob
      */
     public int $scanId = 0;
 
+    /**
+     * @var bool Whether finishing the scan sends notifications.
+     */
+    public bool $notify = true;
+
     // =========================================================================
     // Public Methods
     // =========================================================================
@@ -44,7 +49,7 @@ class FinaliseScan extends BaseJob
      */
     public function execute($queue): void
     {
-        LinkAudit::$plugin->getScanService()->finalise($this->scanId);
+        LinkAudit::$plugin->getScanService()->finalise($this->scanId, $this->notify);
     }
 
     // =========================================================================

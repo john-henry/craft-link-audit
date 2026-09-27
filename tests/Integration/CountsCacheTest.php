@@ -14,14 +14,12 @@ use johnhenry\linkaudit\records\UrlRecord;
 // The cached verdict counts
 //
 // The badges beside the nav read a cached set of counts, held for a minute and
-// cleared by tag whenever something moves. Every writer clears them; the orphan
-// sweep did not, and it moves one of them.
+// cleared by tag whenever something moves, the orphan sweep included.
 //
-// It is not obvious that it does, which is why it was missed: the counts only
-// see URLs that something on the site points at, and an orphan by definition is
-// pointed at by nothing. The exception is the dismissed count, which counts an
-// ignore whose URL row has gone as well as one whose URL is still referenced.
-// Pruning an ignored orphan therefore moves it from uncounted to counted.
+// The counts only see URLs that something on the site points at, and an orphan
+// is pointed at by nothing. The exception is the dismissed count, which counts
+// an ignore whose URL row has gone as well as one whose URL is still
+// referenced, so pruning an ignored orphan moves it.
 //
 // Helper names carry a `counts` prefix: Pest loads every test file into one
 // process, so a bare helper name would collide with another file's.
@@ -65,9 +63,13 @@ it('leaves the counts alone when the sweep finds nothing to remove', function() 
     $siteId = (int) Craft::$app->getSites()->getPrimarySite()->id;
     $reports = LinkAudit::$plugin->getReportService();
 
+    // Clear whatever orphans the test database already holds, so the sweep
+    // below has nothing to find.
+    LinkAudit::$plugin->getScanService()->pruneOrphanUrls();
+    $reports->invalidateCounts();
+
     $before = $reports->cachedVerdictCounts($siteId);
 
-    // Nothing was backdated, so the grace period holds everything back.
     LinkAudit::$plugin->getScanService()->pruneOrphanUrls();
 
     expect($reports->cachedVerdictCounts($siteId))->toBe($before);

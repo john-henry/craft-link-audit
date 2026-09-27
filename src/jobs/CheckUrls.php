@@ -68,6 +68,11 @@ class CheckUrls extends BaseBatchedJob
     public int $cursorId = 0;
 
     /**
+     * @var bool Whether finishing the scan sends notifications.
+     */
+    public bool $notify = true;
+
+    /**
      * @var int The scan this job belongs to.
      */
     public int $scanId = 0;
@@ -78,6 +83,12 @@ class CheckUrls extends BaseBatchedJob
      * verdicts are written.
      */
     public ?int $totalChunks = null;
+
+    /**
+     * @var int[]|null Only these URL rows, for a recheck of one page. Null
+     * checks everything that is due.
+     */
+    public ?array $urlIds = null;
 
     // =========================================================================
     // Public Methods
@@ -124,7 +135,20 @@ class CheckUrls extends BaseBatchedJob
      */
     protected function after(): void
     {
-        QueueHelper::push(new FinaliseScan(['scanId' => $this->scanId]));
+        QueueHelper::push(new FinaliseScan(['scanId' => $this->scanId, 'notify' => $this->notify]));
+    }
+
+    /**
+     * Holds count-cache invalidation back for the batch, so it happens once
+     * at the end rather than once per URL.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    protected function beforeBatch(): void
+    {
+        LinkAudit::$plugin->getReportService()->holdCountInvalidation();
     }
 
     /**
@@ -148,6 +172,8 @@ class CheckUrls extends BaseBatchedJob
      */
     protected function afterBatch(): void
     {
+        LinkAudit::$plugin->getReportService()->releaseCountInvalidation();
+
         $batcher = $this->data();
         assert($batcher instanceof ChunkedUrlBatcher);
 
@@ -193,8 +219,14 @@ class CheckUrls extends BaseBatchedJob
      */
     protected function loadData(): Batchable
     {
+        $query = LinkAudit::$plugin->getUrlStore()->pendingQuery();
+
+        if ($this->urlIds !== null) {
+            $query->andWhere(['id' => $this->urlIds]);
+        }
+
         return new ChunkedUrlBatcher(
-            query: LinkAudit::$plugin->getUrlStore()->pendingQuery(),
+            query: $query,
             chunkSize: max(1, $this->chunkSize),
             cursorId: $this->cursorId,
             total: $this->totalChunks,
@@ -226,10 +258,10 @@ class CheckUrls extends BaseBatchedJob
     /**
      * The longest this step could honestly take.
      *
-     * Every URL in the step timing out, run at whatever concurrency the
-     * settings allow, plus the scheduler's own waiting budget and a margin for
-     * the writes. Never shorter than the queue's own default, so a fast
-     * configuration is not given a tighter deadline than it had before.
+     * Each chunk stops starting requests once the scheduler's run time is up,
+     * so a chunk costs at most that, plus its waiting budget, plus the slowest
+     * request still in flight: a HEAD and a GET, each with a timeout per
+     * redirect hop. Never shorter than the queue's own default.
      *
      * @return int The seconds to reserve.
      * @author John Henry Donovan <info@johnhenry.ie>
@@ -238,13 +270,12 @@ class CheckUrls extends BaseBatchedJob
     private function _worstCaseSeconds(): int
     {
         $settings = LinkAudit::$plugin->getSettings();
+        $scheduler = LinkAudit::$plugin->getRequestScheduler();
 
-        $urls = max(1, $this->batchSize) * max(1, $this->chunkSize);
-        $waves = (int)ceil($urls / max(1, $settings->concurrency));
+        $slowestRequest = 2 * (max(0, $settings->maxRedirects) + 1) * max(1, $settings->timeout);
+        $perChunk = (int)ceil($scheduler->maxRunSeconds + $scheduler->maxYieldSeconds) + $slowestRequest;
 
-        $seconds = $waves * max(1, $settings->timeout)
-            + (int)ceil(LinkAudit::$plugin->getRequestScheduler()->maxYieldSeconds)
-            + self::_TTR_MARGIN_SECONDS;
+        $seconds = max(1, $this->batchSize) * $perChunk + self::_TTR_MARGIN_SECONDS;
 
         return max($seconds, (int)Craft::$app->getQueue()->ttr);
     }

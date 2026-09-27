@@ -15,11 +15,11 @@ use DOMElement;
 use DOMXPath;
 use Exception;
 use GuzzleHttp\ClientInterface;
-use GuzzleHttp\Psr7\Utils;
 use GuzzleHttp\RequestOptions;
 use johnhenry\linkaudit\enums\LinkKind;
 use johnhenry\linkaudit\enums\SchemeKind;
 use johnhenry\linkaudit\exceptions\UnsafeUrlException;
+use johnhenry\linkaudit\helpers\CappedStream;
 use johnhenry\linkaudit\helpers\HtmlParser;
 use johnhenry\linkaudit\helpers\UrlNormaliser;
 use johnhenry\linkaudit\helpers\UrlSafety;
@@ -279,7 +279,7 @@ class PageCrawler extends Component
     public function getClient(): ClientInterface
     {
         if ($this->_client === null) {
-            $this->_client = Craft::createGuzzleClient();
+            $this->_client = Craft::createGuzzleClient(['handler' => UrlSafety::pinnedHandlerStack()]);
         }
 
         return $this->_client;
@@ -578,12 +578,9 @@ class PageCrawler extends Component
             // on every page fetched, so a host that accepts nothing cost the
             // whole request timeout instead.
             //
-            // The sink caps what is held in memory, not what arrives: php://temp
-            // spills to a file past its threshold. One enormous page costs a
-            // temporary file and is read no further than the cap below.
-            RequestOptions::SINK => Utils::streamFor(
-                fopen('php://temp/maxmemory:' . self::_MAX_BODY_BYTES, 'r+b'),
-            ),
+            // Keeps the first two megabytes and drops the rest, so a huge or
+            // endlessly decompressing page costs time, never memory or disk.
+            RequestOptions::SINK => new CappedStream(self::_MAX_BODY_BYTES),
             RequestOptions::TIMEOUT => $settings->timeout,
             RequestOptions::VERIFY => $settings->verifySsl,
         ];

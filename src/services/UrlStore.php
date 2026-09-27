@@ -7,7 +7,9 @@
 namespace johnhenry\linkaudit\services;
 
 use Craft;
+use craft\base\Element;
 use craft\db\Query;
+use craft\db\Table;
 use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
 use DateInterval;
@@ -156,13 +158,74 @@ class UrlStore extends Component
      */
     public function defer(int $urlId, ?int $retryAfterSeconds = null): void
     {
-        $seconds = max(self::_MIN_DEFER_SECONDS, (int)$retryAfterSeconds);
+        $seconds = min(HttpChecker::MAX_RETRY_AFTER_SECONDS, max(self::_MIN_DEFER_SECONDS, (int)$retryAfterSeconds));
 
         Db::update(UrlRecord::tableName(), [
             'nextCheckAfter' => Db::prepareDateForDb(
                 DateTimeHelper::now()->modify("+$seconds seconds"),
             ),
         ], ['id' => $urlId, 'status' => UrlStatus::Pending->value]);
+    }
+
+    /**
+     * Brings forward the next check on every URL row that points at an element,
+     * so links to a page that was deleted or moved are checked on the next run
+     * instead of trusting an "ok" for weeks.
+     *
+     * Covers the element's stand-in rows and the addresses it answers to (or
+     * answered to, when the old URIs are passed in).
+     *
+     * @param int $elementId The element.
+     * @param array<int, string>|null $urisBySite Site id to URI, or null to read
+     *                                            the element's current URIs.
+     * @return int How many URL rows were brought forward.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    public function bringForwardLinksTo(int $elementId, ?array $urisBySite = null): int
+    {
+        $urisBySite ??= (new Query())
+            ->select(['uri', 'siteId'])
+            ->from([Table::ELEMENTS_SITES])
+            ->where(['elementId' => $elementId])
+            ->andWhere(['not', ['uri' => null]])
+            ->indexBy('siteId')
+            ->column();
+
+        $urls = [
+            ExtractedLink::syntheticUrl($elementId),
+            ExtractedLink::relationSyntheticUrl($elementId),
+        ];
+        $sites = Craft::$app->getSites();
+
+        $strip = LinkAudit::$plugin->getSettings()->stripTrackingParams;
+
+        foreach ($urisBySite as $siteId => $uri) {
+            $site = $sites->getSiteById((int)$siteId, true);
+            $baseUrl = $site?->getBaseUrl();
+
+            if ($baseUrl === null || $uri === null) {
+                continue;
+            }
+
+            $path = $uri === Element::HOMEPAGE_URI ? '' : ltrim((string)$uri, '/');
+            $normalised = UrlNormaliser::normalise(rtrim($baseUrl, '/') . '/' . $path, null, $strip);
+
+            if ($normalised !== null) {
+                $urls[] = $normalised;
+            }
+        }
+
+        return Db::update(
+            UrlRecord::tableName(),
+            ['nextCheckAfter' => Db::prepareDateForDb(DateTimeHelper::now()->modify('-1 minute'))],
+            [
+                'and',
+                ['urlHash' => array_map([UrlNormaliser::class, 'hash'], array_unique($urls))],
+                ['not', ['status' => UrlStatus::Ignored->value]],
+            ],
+            updateTimestamp: false,
+        );
     }
 
     /**
@@ -300,7 +363,7 @@ class UrlStore extends Component
         // here rather than only inside the statement.
         for ($attempt = 1; $attempt <= self::_VERDICT_WRITE_ATTEMPTS; $attempt++) {
             $row = (new Query())
-                ->select(['failCount', 'status'])
+                ->select(['failCount', 'status', 'reason'])
                 ->from([UrlRecord::tableName()])
                 ->where(['id' => $urlId])
                 ->one();
@@ -321,7 +384,10 @@ class UrlStore extends Component
             // 404, the message and the date it went, which is exactly what somebody
             // reviewing the decision months later wants to see; rewriting the row
             // with an empty ignored verdict on every scan would rub all of that out.
-            if ((string)$row['status'] === UrlStatus::Ignored->value) {
+            // Only a person's decision is frozen. A link ignored because of a
+            // setting is re-decided every time it's read, so changing the
+            // setting takes effect.
+            if ((string)$row['status'] === UrlStatus::Ignored->value && $row['reason'] === Verdict::REASON_IGNORED) {
                 return;
             }
 
@@ -372,7 +438,13 @@ class UrlStore extends Component
                 : ['id' => $urlId];
 
             if (Db::update(UrlRecord::tableName(), $columns, $condition) > 0) {
-                break;
+                // The counts group by status, so a recheck that confirms what
+                // was already known leaves them alone.
+                if ($status->value !== (string)$row['status']) {
+                    LinkAudit::$plugin->getReportService()->invalidateCounts();
+                }
+
+                return;
             }
         }
 
@@ -419,74 +491,86 @@ class UrlStore extends Component
         array $refs,
         ?array $sources = null,
     ): void {
-        $rows = [];
-
-        foreach ($refs as $ref) {
-            if (empty($ref['urlId']) || empty($ref['elementType'])) {
-                throw new InvalidArgumentException(
-                    'A link reference needs both a urlId and an elementType.',
-                );
-            }
-
-            $rows[] = [
-                (int)$ref['urlId'],
-                $elementId,
-                (string)$ref['elementType'],
-                $siteId,
-                isset($ref['ownerElementId']) ? (int)$ref['ownerElementId'] : null,
-                isset($ref['fieldUid']) ? (string)$ref['fieldUid'] : null,
-                isset($ref['fieldHandle']) ? (string)$ref['fieldHandle'] : null,
-                isset($ref['source']) ? (string)$ref['source'] : 'field',
-                $this->_truncate(
-                    isset($ref['linkText']) ? (string)$ref['linkText'] : null,
-                    self::_MAX_LINK_TEXT,
-                ),
-                $this->_truncate(
-                    isset($ref['rawHref']) ? (string)$ref['rawHref'] : null,
-                    self::_MAX_RAW_HREF,
-                ),
-                isset($ref['scanId']) ? (int)$ref['scanId'] : null,
-            ];
-        }
-
         $condition = ['elementId' => $elementId, 'siteId' => $siteId];
 
         if ($sources !== null) {
             $condition['source'] = $sources;
         }
 
-        $transaction = Craft::$app->getDb()->beginTransaction();
+        $this->_replaceReferences($condition, [$elementId => $refs], $siteId);
+    }
 
-        try {
-            Db::delete(ReferenceRecord::tableName(), $condition);
+    /**
+     * Sends links ignored because of a setting or an ignore rule back to be
+     * checked, after the settings change. Links a person ignored stay put.
+     *
+     * @return int How many links were released.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    public function releaseSettingIgnores(): int
+    {
+        $released = Db::update(UrlRecord::tableName(), [
+            'status' => UrlStatus::Pending->value,
+            'reason' => null,
+            'nextCheckAfter' => null,
+        ], [
+            'status' => UrlStatus::Ignored->value,
+            'reason' => [Verdict::REASON_SETTING, Verdict::REASON_IGNORE_RULE],
+        ]);
 
-            if ($rows !== []) {
-                Db::batchInsert(ReferenceRecord::tableName(), [
-                    'urlId',
-                    'elementId',
-                    'elementType',
-                    'siteId',
-                    'ownerElementId',
-                    'fieldUid',
-                    'fieldHandle',
-                    'source',
-                    'linkText',
-                    'rawHref',
-                    'scanId',
-                ], $rows);
-            }
-
-            $transaction->commit();
-        } catch (Throwable $e) {
-            $transaction->rollBack();
-
-            throw $e;
+        if ($released > 0) {
+            LinkAudit::$plugin->getReportService()->invalidateCounts();
         }
 
-        // A rebuild moves the site-scoped counts even when no verdict changes
-        // hands: a broken URL gaining or losing its references on this site is
-        // what puts it on or takes it off this site's badge.
-        LinkAudit::$plugin->getReportService()->invalidateCounts();
+        return $released;
+    }
+
+    /**
+     * Replaces every reference an owner holds on a site: those on the page
+     * itself and those in everything nested inside it.
+     *
+     * Grouping by the element a link was found in misses a block whose last
+     * link was removed: the walker finds nothing in it, so it gets no group and
+     * its old rows would stay. Replacing by owner takes them with it.
+     *
+     * @param int $ownerId The root element that was read.
+     * @param int $siteId The site it was read on.
+     * @param array<int, array<int, array<string, mixed>>> $refsByElementId The
+     *        references found, keyed by the element each was found in.
+     * @param string[] $sources The sources being replaced.
+     * @return void
+     * @throws InvalidArgumentException If a reference is missing `urlId` or `elementType`.
+     * @throws Throwable If the transaction cannot be completed.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    public function replaceOwnedReferences(int $ownerId, int $siteId, array $refsByElementId, array $sources): void
+    {
+        $this->_replaceReferences([
+            'and',
+            ['siteId' => $siteId, 'source' => $sources],
+            ['or', ['elementId' => $ownerId], ['ownerElementId' => $ownerId]],
+        ], $refsByElementId, $siteId);
+    }
+
+    /**
+     * Replaces every reference of the given sources on a site, for a phase that
+     * reads the whole site at once, such as navigation.
+     *
+     * @param int $siteId The site.
+     * @param array<int, array<int, array<string, mixed>>> $refsByElementId The
+     *        references found, keyed by the element each was found in.
+     * @param string[] $sources The sources being replaced.
+     * @return void
+     * @throws InvalidArgumentException If a reference is missing `urlId` or `elementType`.
+     * @throws Throwable If the transaction cannot be completed.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    public function replaceSiteReferences(int $siteId, array $refsByElementId, array $sources): void
+    {
+        $this->_replaceReferences(['siteId' => $siteId, 'source' => $sources], $refsByElementId, $siteId);
     }
 
     /**
@@ -774,5 +858,87 @@ class UrlStore extends Component
         }
 
         return mb_substr($value, 0, $length);
+    }
+
+    /**
+     * Deletes the rows a condition matches and inserts the new ones, in one
+     * transaction.
+     *
+     * @param array<int|string, mixed> $condition The rows being replaced.
+     * @param array<int, array<int, array<string, mixed>>> $refsByElementId The
+     *        new references, keyed by the element each was found in.
+     * @param int $siteId The site they were read on.
+     * @return void
+     * @throws InvalidArgumentException If a reference is missing `urlId` or `elementType`.
+     * @throws Throwable If the transaction cannot be completed.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    private function _replaceReferences(array $condition, array $refsByElementId, int $siteId): void
+    {
+        $rows = [];
+
+        foreach ($refsByElementId as $elementId => $refs) {
+            foreach ($refs as $ref) {
+                if (empty($ref['urlId']) || empty($ref['elementType'])) {
+                    throw new InvalidArgumentException(
+                        'A link reference needs both a urlId and an elementType.',
+                    );
+                }
+
+                $rows[] = [
+                    (int)$ref['urlId'],
+                    (int)$elementId,
+                    (string)$ref['elementType'],
+                    $siteId,
+                    isset($ref['ownerElementId']) ? (int)$ref['ownerElementId'] : null,
+                    isset($ref['fieldUid']) ? (string)$ref['fieldUid'] : null,
+                    isset($ref['fieldHandle']) ? (string)$ref['fieldHandle'] : null,
+                    isset($ref['source']) ? (string)$ref['source'] : 'field',
+                    $this->_truncate(
+                        isset($ref['linkText']) ? (string)$ref['linkText'] : null,
+                        self::_MAX_LINK_TEXT,
+                    ),
+                    $this->_truncate(
+                        isset($ref['rawHref']) ? (string)$ref['rawHref'] : null,
+                        self::_MAX_RAW_HREF,
+                    ),
+                    isset($ref['scanId']) ? (int)$ref['scanId'] : null,
+                ];
+            }
+        }
+
+        $transaction = Craft::$app->getDb()->beginTransaction();
+
+        try {
+            Db::delete(ReferenceRecord::tableName(), $condition);
+
+            if ($rows !== []) {
+                Db::batchInsert(ReferenceRecord::tableName(), [
+                    'urlId',
+                    'elementId',
+                    'elementType',
+                    'siteId',
+                    'ownerElementId',
+                    'fieldUid',
+                    'fieldHandle',
+                    'source',
+                    'linkText',
+                    'rawHref',
+                    'scanId',
+                ], $rows);
+            }
+
+            $transaction->commit();
+        } catch (Throwable $e) {
+            $transaction->rollBack();
+
+            throw $e;
+        }
+
+        // A rebuild moves the site-scoped counts even when no verdict changes
+        // hands: a broken URL gaining or losing its references on this site is
+        // what puts it on or takes it off this site's badge.
+        LinkAudit::$plugin->getReportService()->invalidateCounts();
     }
 }

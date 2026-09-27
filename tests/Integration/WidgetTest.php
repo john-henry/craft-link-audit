@@ -134,8 +134,9 @@ describe('BrokenLinksWidget', function() {
 
         $html = widgetBody();
 
-        expect($html)->toContain('>2</a>')
-            ->and($html)->toContain('>1</a>')
+        expect($html)->toMatch('/-broken-count">2<\/span>/')
+            ->and($html)->toMatch('/-permanent-count">1<\/span>/')
+            ->and($html)->toMatch('/aria-labelledby="(\S+)-broken-count \1-broken-label"/')
             ->and($html)->toContain('broken')
             ->and($html)->toContain('Last scanned');
     });

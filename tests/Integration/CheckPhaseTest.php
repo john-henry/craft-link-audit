@@ -513,7 +513,8 @@ it('calls an internal URL nothing answers for broken on the server\'s own answer
     $checked = LinkAudit::getInstance()->getScanService()->checkChunk([laCheckUrlRow($urlId)]);
     $row = laCheckUrlRow($urlId);
 
-    expect($sent)->toHaveCount(1)
+    // A HEAD and the GET that confirms its 404.
+    expect($sent)->toHaveCount(2)
         ->and($checked)->toBe(1)
         ->and($row['status'])->toBe(UrlStatus::Broken->value)
         ->and($row['reason'])->toBe(Verdict::REASON_HTTP)
@@ -557,7 +558,8 @@ it('calls a file-shaped internal URL broken over its HTTP answer, not a database
 
     LinkAudit::getInstance()->getScanService()->checkChunk([laCheckUrlRow($urlId)]);
 
-    expect($sent)->toHaveCount(1)
+    // A HEAD and the GET that confirms its 404.
+    expect($sent)->toHaveCount(2)
         ->and(laCheckUrlRow($urlId)['status'])->toBe(UrlStatus::Broken->value)
         ->and(laCheckUrlRow($urlId)['reason'])->toBe(Verdict::REASON_HTTP);
 });

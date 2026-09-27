@@ -8,23 +8,28 @@
         </p>
     </div>
 {% else %}
+    {% set idPrefix = 'link-audit-widget-' ~ random() %}
     <div class="flex" style="flex-wrap:wrap;gap:28px">
         <div>
             <div style="font-size:28px;line-height:1.2">
-                <a href="{{ cpUrl('link-audit/broken', query) }}">{{ broken }}</a>
+                <a href="{{ cpUrl('link-audit/broken', query) }}" aria-labelledby="{{ idPrefix }}-broken-count {{ idPrefix }}-broken-label">
+                    <span id="{{ idPrefix }}-broken-count">{{ broken }}</span>
+                </a>
             </div>
             <div class="light flex" style="align-items:center;gap:6px">
-                <span class="status {{ broken > 0 ? 'red' : 'green' }}"></span>
-                {{ 'Broken'|t('link-audit') }}
+                <span class="status {{ broken > 0 ? 'red' : 'green' }}" aria-hidden="true"></span>
+                <span id="{{ idPrefix }}-broken-label">{{ 'Broken'|t('link-audit') }}</span>
             </div>
         </div>
         <div>
             <div style="font-size:28px;line-height:1.2">
-                <a href="{{ cpUrl('link-audit/redirects', query|merge({ permanent: '1' })) }}">{{ permanentRedirects }}</a>
+                <a href="{{ cpUrl('link-audit/redirects', query|merge({ permanent: '1' })) }}" aria-labelledby="{{ idPrefix }}-permanent-count {{ idPrefix }}-permanent-label">
+                    <span id="{{ idPrefix }}-permanent-count">{{ permanentRedirects }}</span>
+                </a>
             </div>
             <div class="light flex" style="align-items:center;gap:6px;flex-wrap:wrap">
-                <span class="status blue"></span>
-                {{ 'Permanent Redirects'|t('link-audit') }}
+                <span class="status blue" aria-hidden="true"></span>
+                <span id="{{ idPrefix }}-permanent-label">{{ 'Permanent Redirects'|t('link-audit') }}</span>
                 <span class="info" style="width:1.25em">{{ 'The pages these links point at have moved for good, and your content still carries the old addresses. The links still work, but they are worth updating.'|t('link-audit') }}</span>
             </div>
         </div>

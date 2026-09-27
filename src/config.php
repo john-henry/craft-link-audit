@@ -56,6 +56,10 @@ return [
     // The same fence for category groups, where having no pages is the norm.
     // 'excludedCategoryGroupUids' => [],
 
+    // Field UIDs whose content is never read for links, such as a legacy body
+    // kept after a migration. Excluding a Matrix field skips everything in it.
+    // 'excludedFieldUids' => [],
+
     // Resolve internal links against the site's own elements and routes.
     // 'checkInternalLinks' => true,
 
@@ -68,9 +72,9 @@ return [
     //
     // Pages kept out of the scan by URI. `uriPattern` is a regular expression
     // tested against the URI with no leading slash; the homepage is `^$`. An
-    // empty `siteId` means every site.
+    // empty `siteUid` means every site.
     // 'excludedUriPatterns' => [
-    //     ['enabled' => true, 'siteId' => '', 'uriPattern' => '^checkout'],
+    //     ['enabled' => true, 'siteUid' => '', 'uriPattern' => '^checkout'],
     // ],
 
     // Internal URLs always treated as valid, whatever the resolver makes of

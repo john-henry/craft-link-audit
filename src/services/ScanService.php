@@ -13,6 +13,7 @@ use craft\db\Query;
 use craft\db\Table;
 use craft\elements\Category;
 use craft\elements\Entry;
+use craft\helpers\ArrayHelper;
 use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
 use craft\helpers\Queue as QueueHelper;
@@ -71,7 +72,7 @@ class ScanService extends Component
      * row that has gone quiet for this long belongs to a worker that died, and
      * one of those should not lock the plugin out for good.
      */
-    private const _ABANDONED_AFTER_MINUTES = 60;
+    public const ABANDONED_AFTER_MINUTES = 60;
 
     /**
      * @var int How many orphaned URL rows are deleted at a time.
@@ -109,47 +110,90 @@ class ScanService extends Component
      * What a cancelled run costs is the rest of the content it had not reached
      * yet, which the next scan reads as a matter of course.
      *
-     * The same lookup the double-start guard uses, so the two cannot disagree
-     * about what counts as running, and a cancelled row is not one of the
-     * statuses it looks for: the guard frees the moment this returns.
+     * Every scan still marked as running is called off, including one whose
+     * worker died, so the start guard frees the moment this returns.
      *
-     * @return ScanRecord|null The scan that was called off, or null when nothing
-     *                         was running.
+     * @return ScanRecord|null The newest scan that was called off, or null when
+     *                         nothing was running.
      * @throws InvalidConfigException If the queue component cannot be resolved.
      * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function cancelScan(): ?ScanRecord
     {
-        $running = $this->_runningScanId(
-            DateTimeHelper::now()->modify('-' . self::_ABANDONED_AFTER_MINUTES . ' minutes'),
-        );
+        // Every row still marked as running, however long it has been quiet:
+        // Stop has to clear an abandoned run too, and a check-only run started
+        // over a full one leaves two.
+        $ids = (new Query())
+            ->select(['id'])
+            ->from([ScanRecord::tableName()])
+            ->where(['status' => self::_runningStatuses()])
+            ->orderBy(['id' => SORT_DESC])
+            ->column();
 
-        if ($running === null) {
-            return null;
-        }
-
-        $scan = ScanRecord::findOne(['id' => $running]);
-
-        if (!$scan instanceof ScanRecord) {
-            // Gone between the two reads, which means the history was pruned in
-            // the same instant. There is nothing left to call off.
+        if ($ids === []) {
             return null;
         }
 
         $released = QueueJobs::release();
 
-        $scan->status = ScanStatus::Cancelled->value;
-        $scan->dateFinished = Db::prepareDateForDb(DateTimeHelper::now());
-        $scan->save(false);
+        Db::update(ScanRecord::tableName(), [
+            'status' => ScanStatus::Cancelled->value,
+            'dateFinished' => Db::prepareDateForDb(DateTimeHelper::now()),
+        ], ['id' => $ids]);
 
         // The badges read a cached set of counts, and a run stopping part way
         // through is exactly when somebody goes looking at them.
         LinkAudit::$plugin->getReportService()->invalidateCounts();
 
-        Craft::info("Cancelled scan $running: released $released queued job(s).", 'link-audit');
+        Craft::info(
+            'Cancelled scan(s) ' . implode(', ', $ids) . ": released $released queued job(s).",
+            'link-audit',
+        );
 
-        return $scan;
+        return ScanRecord::findOne(['id' => (int)$ids[0]]);
+    }
+
+    /**
+     * Marks a scan failed, if it is still marked as running.
+     *
+     * Called when one of the scan's jobs errors and the queue won't retry it,
+     * so the Overview stops waiting on a run that will never finish.
+     *
+     * @param int $scanId The scan.
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    public function markFailed(int $scanId): void
+    {
+        $updated = Db::update(ScanRecord::tableName(), [
+            'status' => ScanStatus::Failed->value,
+            'dateFinished' => Db::prepareDateForDb(DateTimeHelper::now()),
+        ], ['id' => $scanId, 'status' => self::_runningStatuses()]);
+
+        if ($updated > 0) {
+            LinkAudit::$plugin->getReportService()->invalidateCounts();
+        }
+    }
+
+    /**
+     * The newest scan still running, or null.
+     *
+     * A run whose row hasn't been touched for
+     * {@see self::ABANDONED_AFTER_MINUTES} doesn't count: every phase writes to
+     * the row as it goes, so a quiet one belongs to a worker that died. The one
+     * rule the start guard, the schedule and the Overview all use.
+     *
+     * @return int|null The scan id.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    public function activeScanId(): ?int
+    {
+        return $this->_runningScanId(
+            DateTimeHelper::now()->modify('-' . self::ABANDONED_AFTER_MINUTES . ' minutes'),
+        );
     }
 
     /**
@@ -178,6 +222,9 @@ class ScanService extends Component
      *                                               {@see UrlStore::pendingQuery()}
      *                                               returns them.
      * @param int|null $scanId The scan to count the results against.
+     * @param bool $inline Whether someone is waiting on the answer in a web
+     *                     request, in which case nothing is retried, so the
+     *                     request can't run past PHP's time limit.
      * @return int How many rows got a verdict, which is not the same as how many
      *             were offered.
      * @throws Exception If a time to live setting cannot be turned into an
@@ -185,7 +232,7 @@ class ScanService extends Component
      * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    public function checkChunk(array $rows, ?int $scanId = null): int
+    public function checkChunk(array $rows, ?int $scanId = null, bool $inline = false): int
     {
         $store = LinkAudit::$plugin->getUrlStore();
         $ignores = LinkAudit::$plugin->getIgnoreService();
@@ -239,19 +286,29 @@ class ScanService extends Component
         }
 
         if ($external !== []) {
-            $verdicts = LinkAudit::$plugin->getRequestScheduler()->run(array_keys($external));
+            $written = [];
 
-            foreach ($external as $url => $urlId) {
-                $verdict = $verdicts[$url] ?? null;
+            // Written as each request settles rather than once the chunk is
+            // done, so a worker killed part way through keeps what it learned.
+            $write = static function(string $url, Verdict $verdict) use (
+                $external,
+                $store,
+                &$written,
+                &$checked,
+                &$broken,
+            ): void {
+                $urlId = $external[$url] ?? null;
 
-                if ($verdict === null) {
-                    continue;
+                if ($urlId === null || isset($written[$url])) {
+                    return;
                 }
+
+                $written[$url] = true;
 
                 if ($verdict->isDeferred()) {
                     $store->defer($urlId, $verdict->retryAfterSeconds);
 
-                    continue;
+                    return;
                 }
 
                 $store->recordVerdict($urlId, $verdict);
@@ -260,6 +317,16 @@ class ScanService extends Component
                 if ($verdict->status === UrlStatus::Broken) {
                     $broken++;
                 }
+            };
+
+            $verdicts = LinkAudit::$plugin->getRequestScheduler()->run(
+                array_keys($external),
+                $write,
+                $inline ? 0 : null,
+            );
+
+            foreach ($verdicts as $url => $verdict) {
+                $write((string)$url, $verdict);
             }
         }
 
@@ -342,11 +409,9 @@ class ScanService extends Component
                 'eo.elementId' => null,
             ])
             ->andWhere(['e.type' => $this->_settings()->resolvedScannedElementTypes()])
-            // Deterministic order is load-bearing for the batched job: the
-            // batcher pages with LIMIT/OFFSET, and without a total order the
-            // database may hand back a different order per page, silently
-            // skipping some elements and reading others twice. Site and element
-            // together are unique in this table, so this is a total order.
+            // The extract job pages on (siteId, elementId), so this order is
+            // load-bearing. Site and element together are unique in this
+            // table, so it is a total order.
             ->orderBy(['es.siteId' => SORT_ASC, 'es.elementId' => SORT_ASC]);
 
         if ($since !== null) {
@@ -364,6 +429,22 @@ class ScanService extends Component
 
         if ($elementIds !== null) {
             $query->andWhere(['es.elementId' => $elementIds]);
+        }
+
+        $excludedSectionIds = $this->_settings()->excludedSectionIds();
+
+        if ($excludedSectionIds !== []) {
+            $query
+                ->leftJoin(['en' => Table::ENTRIES], '[[en.id]] = [[es.elementId]]')
+                ->andWhere(['or', ['en.sectionId' => null], ['not', ['en.sectionId' => $excludedSectionIds]]]);
+        }
+
+        $excludedGroupIds = $this->_settings()->excludedCategoryGroupIds();
+
+        if ($excludedGroupIds !== []) {
+            $query
+                ->leftJoin(['cat' => Table::CATEGORIES], '[[cat.id]] = [[es.elementId]]')
+                ->andWhere(['or', ['cat.groupId' => null], ['not', ['cat.groupId' => $excludedGroupIds]]]);
         }
 
         return $query;
@@ -459,18 +540,17 @@ class ScanService extends Component
             }
         }
 
+        $byElement = [];
+
         foreach ($refs as $key => $rows) {
-            [$refElementId, $refSiteId] = explode(':', (string)$key);
-            // Field rows only. What a template hard-codes onto this page is the
-            // rendered crawl's to say, and reading the fields again says nothing
-            // about it either way.
-            $store->replaceReferencesFor(
-                (int)$refElementId,
-                (int)$refSiteId,
-                $rows,
-                [ExtractedLink::SOURCE_FIELD],
-            );
+            [$refElementId] = explode(':', (string)$key);
+            $byElement[(int)$refElementId] = $rows;
         }
+
+        // Replaced by owner, so a block whose last link was removed is cleared
+        // too. Field rows only: what a template hard-codes onto this page is
+        // the rendered crawl's to say.
+        $store->replaceOwnedReferences($elementId, $siteId, $byElement, [ExtractedLink::SOURCE_FIELD]);
 
         return count($links);
     }
@@ -537,15 +617,16 @@ class ScanService extends Component
                 $found++;
             }
 
+            $byElement = [];
+
             foreach ($refs as $key => $rows) {
-                [$elementId, $nodeSiteId] = explode(':', (string)$key);
-                $store->replaceReferencesFor(
-                    (int)$elementId,
-                    (int)$nodeSiteId,
-                    $rows,
-                    [ExtractedLink::SOURCE_NAV],
-                );
+                [$elementId] = explode(':', (string)$key);
+                $byElement[(int)$elementId] = $rows;
             }
+
+            // The whole site's navigation is read at once, so its rows are
+            // replaced as a set: a node whose link was removed goes too.
+            $store->replaceSiteReferences($siteId, $byElement, [ExtractedLink::SOURCE_NAV]);
         }
 
         return $found;
@@ -560,13 +641,17 @@ class ScanService extends Component
      * elements this run never visited, and only a full run is entitled to
      * conclude that those are stale.
      *
+     * A single-element read skips the table-wide orphan sweep: it is one page
+     * read from the edit screen, and the next scan tidies up after it.
+     *
      * @param int $scanId The scan to close.
+     * @param bool $notify Whether to send the scan-complete notifications.
      * @return void
      * @throws Throwable If the tidy up cannot be completed.
      * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    public function finalise(int $scanId): void
+    public function finalise(int $scanId, bool $notify = true): void
     {
         $scan = $this->getScan($scanId);
 
@@ -584,7 +669,7 @@ class ScanService extends Component
             $this->_pruneRenderedReferences();
         }
 
-        if ($this->_settings()->pruneOrphanUrls) {
+        if ($this->_settings()->pruneOrphanUrls && $mode !== ScanMode::Single) {
             $this->pruneOrphanUrls();
         }
 
@@ -602,7 +687,43 @@ class ScanService extends Component
         // recorded, and a scan finishing is exactly when somebody looks at them.
         LinkAudit::$plugin->getReportService()->invalidateCounts();
 
-        $this->_notify($scan);
+        Craft::info("Scan $scanId finished.", 'link-audit');
+
+        if ($notify) {
+            $this->_notify($scan);
+        }
+    }
+
+    /**
+     * Deletes scan history past the retention window, and throttling state for
+     * hosts no stored URL points at any more.
+     *
+     * @param int|null $days Days of history to keep, or null for the setting.
+     *                       Zero or less keeps every scan.
+     * @return int How many scans were deleted.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    public function pruneHistory(?int $days = null): int
+    {
+        $days ??= $this->_settings()->retainDays;
+        $scans = 0;
+
+        if ($days > 0) {
+            $scans = Db::delete(ScanRecord::tableName(), [
+                'and',
+                ['<', 'dateCreated', Db::prepareDateForDb(DateTimeHelper::now()->modify("-$days days"))],
+                ['not', ['status' => self::_runningStatuses()]],
+            ]);
+        }
+
+        Db::delete(HostRecord::tableName(), [
+            'not in',
+            'host',
+            (new Query())->select(['host'])->distinct()->from([UrlRecord::tableName()]),
+        ]);
+
+        return $scans;
     }
 
     /**
@@ -631,9 +752,9 @@ class ScanService extends Component
      * fixed a link wants the report to catch up while they are looking at it,
      * not on the next scan's schedule. The element is read again first, so the
      * fix itself is what gets asked about, then everything the page points at
-     * has its next check dragged into the past and a check-only run is queued.
-     * Ignored URLs stay ignored: a decision somebody recorded is not undone by
-     * a refresh button.
+     * has its next check dragged into the past and a check-only run is queued
+     * for those URLs alone. That run sends no notifications. Ignored URLs stay
+     * ignored: a decision somebody recorded is not undone by a refresh button.
      *
      * @param int $elementId The element to reread.
      * @param int $siteId The site it is being edited on.
@@ -646,28 +767,33 @@ class ScanService extends Component
     {
         $this->scanElement($elementId, $siteId);
 
-        $held = (new Query())
-            ->select(['r.urlId'])
+        $urlIds = (new Query())
+            ->select(['u.id'])
+            ->distinct()
             ->from(['r' => ReferenceRecord::tableName()])
+            ->innerJoin(['u' => UrlRecord::tableName()], '[[u.id]] = [[r.urlId]]')
             ->where(['r.siteId' => $siteId])
-            ->andWhere(['or', ['r.elementId' => $elementId], ['r.ownerElementId' => $elementId]]);
+            ->andWhere(['or', ['r.elementId' => $elementId], ['r.ownerElementId' => $elementId]])
+            ->andWhere(['not', ['u.status' => UrlStatus::Ignored->value]])
+            ->column();
+
+        if ($urlIds === []) {
+            return 0;
+        }
 
         // Dragging the next check date into the past is what puts these back
         // in front of the check phase, the same move the recheck-broken
         // command makes, scoped to the one page.
-        $count = (int)Craft::$app->getDb()->createCommand()
-            ->update(
-                UrlRecord::tableName(),
-                ['nextCheckAfter' => Db::prepareDateForDb(DateTimeHelper::now()->modify('-1 minute'))],
-                ['and', ['in', 'id', $held], ['not', ['status' => UrlStatus::Ignored->value]]],
-            )
-            ->execute();
+        Db::update(
+            UrlRecord::tableName(),
+            ['nextCheckAfter' => Db::prepareDateForDb(DateTimeHelper::now()->modify('-1 minute'))],
+            ['id' => $urlIds],
+            updateTimestamp: false,
+        );
 
-        if ($count > 0) {
-            $this->startScan(ScanMode::CheckOnly);
-        }
+        $this->startScan(ScanMode::CheckOnly, urlIds: array_map('intval', $urlIds), notify: false);
 
-        return $count;
+        return count($urlIds);
     }
 
     /**
@@ -721,6 +847,8 @@ class ScanService extends Component
             return false;
         }
 
+        $siteIdsByUid = ArrayHelper::map(Craft::$app->getSites()->getAllSites(true), 'uid', 'id');
+
         // Normalise to what the patterns are written against: no leading slash,
         // and the homepage as an empty string, so matching the homepage is an
         // empty pattern.
@@ -731,9 +859,13 @@ class ScanService extends Component
                 continue;
             }
 
-            $rowSiteId = $row['siteId'] ?? '';
+            // Rows saved before 1.0.0-beta.8 carry a numeric site ID instead.
+            $rowSiteUid = (string)($row['siteUid'] ?? '');
+            $rowSiteId = $rowSiteUid !== ''
+                ? ($siteIdsByUid[$rowSiteUid] ?? null)
+                : (($row['siteId'] ?? '') !== '' ? (int)$row['siteId'] : null);
 
-            if ($rowSiteId !== '' && (int)$rowSiteId !== $siteId) {
+            if (($rowSiteUid !== '' || ($row['siteId'] ?? '') !== '') && $rowSiteId !== $siteId) {
                 continue;
             }
 
@@ -756,41 +888,60 @@ class ScanService extends Component
     }
 
     /**
-     * When the last run that covered the whole site started.
+     * When the last completed run that covered every one of the given sites
+     * started.
      *
      * The reference point for an incremental scan, and it is the start rather
      * than the finish on purpose: an element edited while the last scan was
      * running may well have been read before the edit landed, so counting from
      * the finish would miss it.
      *
-     * @return DateTimeInterface|null The moment, or null when nothing has
-     *                                completed yet.
+     * A run of one site only counts for that site. Across several sites the
+     * earliest of their cut-offs wins, so no site's edits are skipped; the cost
+     * is re-reading a few elements on the sites scanned more recently.
+     *
+     * @param int[]|null $siteIds The sites the next run covers, or null for all.
+     * @return DateTimeInterface|null The moment, or null when one of the sites
+     *                                has no completed run yet.
      * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    public function lastCompletedScanStart(): ?DateTimeInterface
+    public function lastCompletedScanStart(?array $siteIds = null): ?DateTimeInterface
     {
-        $started = (new Query())
-            ->select(['dateStarted'])
-            ->from([ScanRecord::tableName()])
-            ->where([
-                'status' => ScanStatus::Complete->value,
-                'mode' => [ScanMode::Full->value, ScanMode::Incremental->value],
-            ])
-            ->andWhere(['not', ['dateStarted' => null]])
-            ->orderBy(['dateStarted' => SORT_DESC])
-            ->scalar();
+        $earliest = null;
 
-        if ($started === false || $started === null) {
-            return null;
+        foreach ($siteIds ?? $this->siteIds(null) as $siteId) {
+            $started = (new Query())
+                ->select(['dateStarted'])
+                ->from([ScanRecord::tableName()])
+                ->where([
+                    'status' => ScanStatus::Complete->value,
+                    'mode' => [ScanMode::Full->value, ScanMode::Incremental->value],
+                ])
+                ->andWhere(['or', ['siteId' => null], ['siteId' => (int)$siteId]])
+                ->andWhere(['not', ['dateStarted' => null]])
+                ->orderBy(['dateStarted' => SORT_DESC])
+                ->scalar();
+
+            if ($started === false || $started === null) {
+                return null;
+            }
+
+            // Stored dates are UTC, so they are read back as UTC: assuming the
+            // system time zone here would shift the cut-off by the server's
+            // offset and quietly rescan, or miss, an hour's worth of edits.
+            $date = DateTimeHelper::toDateTime((string)$started);
+
+            if ($date === false) {
+                return null;
+            }
+
+            if ($earliest === null || $date < $earliest) {
+                $earliest = $date;
+            }
         }
 
-        // Stored dates are UTC, so they are read back as UTC: assuming the
-        // system time zone here would shift the cut-off by the server's offset
-        // and quietly rescan, or miss, an hour's worth of edits.
-        $date = DateTimeHelper::toDateTime((string)$started);
-
-        return $date !== false ? $date : null;
+        return $earliest;
     }
 
     /**
@@ -916,6 +1067,19 @@ class ScanService extends Component
             ['not', ['source' => ExtractedLink::SOURCE_RENDERED]],
         ];
 
+        // Rows are rewritten every time a page is read, so a row written after
+        // this run started (by an editor saving a page while it ran) is newer
+        // than anything the run could have seen, whatever scan it carries.
+        $started = (new Query())
+            ->select(['dateStarted'])
+            ->from([ScanRecord::tableName()])
+            ->where(['id' => $scanId])
+            ->scalar();
+
+        if (is_string($started) && $started !== '') {
+            $condition[] = ['<', 'dateCreated', $started];
+        }
+
         if ($siteId !== null) {
             $condition[] = ['siteId' => $siteId];
         }
@@ -1007,7 +1171,13 @@ class ScanService extends Component
                 // Every source, not just the fields: an element that is no
                 // longer readable on this site has no page here either, so
                 // whatever a crawl found on it goes with the rest.
-                LinkAudit::$plugin->getUrlStore()->replaceReferencesFor($elementId, $siteId, []);
+                // Owned rows too, so links in its nested blocks go with it.
+                LinkAudit::$plugin->getUrlStore()->replaceOwnedReferences(
+                    $elementId,
+                    $siteId,
+                    [],
+                    [ExtractedLink::SOURCE_FIELD, ExtractedLink::SOURCE_RENDERED],
+                );
 
                 continue;
             }
@@ -1114,7 +1284,7 @@ class ScanService extends Component
         $hours = max(1, $settings->scheduledScanIntervalHours);
         $cutOff = DateTimeHelper::now()->modify("-$hours hours");
 
-        if ($this->_scanInProgress($cutOff)) {
+        if ($this->activeScanId() !== null) {
             return null;
         }
 
@@ -1220,18 +1390,22 @@ class ScanService extends Component
      *
      * @param ScanMode $mode What the run is for.
      * @param int|null $siteId The site to cover, or null for every site.
+     * @param int[]|null $urlIds For a check-only run, only these URL rows.
+     * @param bool $notify Whether finishing the run sends notifications.
      * @return ScanRecord The scan row.
      * @throws ScanInProgressException If a run that reads content was asked for
      *                                 while one is already going.
      * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    public function startScan(ScanMode $mode, ?int $siteId = null): ScanRecord
-    {
+    public function startScan(
+        ScanMode $mode,
+        ?int $siteId = null,
+        ?array $urlIds = null,
+        bool $notify = true,
+    ): ScanRecord {
         if ($mode === ScanMode::Full || $mode === ScanMode::Incremental) {
-            $running = $this->_runningScanId(
-                DateTimeHelper::now()->modify('-' . self::_ABANDONED_AFTER_MINUTES . ' minutes'),
-            );
+            $running = $this->activeScanId();
 
             if ($running !== null) {
                 throw new ScanInProgressException($running);
@@ -1242,16 +1416,21 @@ class ScanService extends Component
         $scanId = (int)$scan->id;
 
         if ($mode === ScanMode::CheckOnly) {
-            QueueHelper::push(new CheckUrls(['scanId' => $scanId]));
+            QueueHelper::push(new CheckUrls([
+                'scanId' => $scanId,
+                'urlIds' => $urlIds,
+                'notify' => $notify,
+            ]));
 
             return $scan;
         }
 
-        $since = $mode === ScanMode::Incremental ? $this->lastCompletedScanStart() : null;
+        $siteIds = $this->siteIds($siteId);
+        $since = $mode === ScanMode::Incremental ? $this->lastCompletedScanStart($siteIds) : null;
 
         QueueHelper::push(new ExtractLinks([
             'scanId' => $scanId,
-            'siteIds' => $this->siteIds($siteId),
+            'siteIds' => $siteIds,
             'since' => $since?->format(DATE_ATOM),
         ]));
 
@@ -1399,8 +1578,6 @@ class ScanService extends Component
      */
     private function _notify(array $scan): void
     {
-        Craft::info("Scan {$scan['id']} finished.", 'link-audit');
-
         // A single-element read is not a moment to mail the content team: it is
         // one page re-read from the edit screen or a console command, not a
         // sweep of the site. The scans that broadcast are the ones that looked
@@ -1580,13 +1757,7 @@ class ScanService extends Component
         $id = (new Query())
             ->select(['id'])
             ->from([ScanRecord::tableName()])
-            ->where([
-                'status' => [
-                    ScanStatus::Queued->value,
-                    ScanStatus::Extracting->value,
-                    ScanStatus::Checking->value,
-                ],
-            ])
+            ->where(['status' => self::_runningStatuses()])
             ->andWhere(['>', 'dateUpdated', Db::prepareDateForDb($cutOff)])
             ->orderBy(['id' => SORT_DESC])
             ->scalar();
@@ -1595,17 +1766,19 @@ class ScanService extends Component
     }
 
     /**
-     * Whether a run is still going.
+     * The statuses a scan holds while it is still going.
      *
-     * @param DateTimeInterface $cutOff The moment before which a running scan is
-     *                                  treated as abandoned.
-     * @return bool Whether something is already running.
+     * @return string[] The status values.
      * @author John Henry Donovan <info@johnhenry.ie>
-     * @since 1.0.0
+     * @since 1.0.0-beta.8
      */
-    private function _scanInProgress(DateTimeInterface $cutOff): bool
+    private static function _runningStatuses(): array
     {
-        return $this->_runningScanId($cutOff) !== null;
+        return [
+            ScanStatus::Queued->value,
+            ScanStatus::Extracting->value,
+            ScanStatus::Checking->value,
+        ];
     }
 
     /**

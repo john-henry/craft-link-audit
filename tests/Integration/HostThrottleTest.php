@@ -206,7 +206,7 @@ it('forgets a learned gap again as the host goes back to answering', function() 
         ->and(linkAuditHostRow('example.com')['minDelayMs'])->toBeNull();
 });
 
-it('leaves a host out of the batch when its gap could never get through them', function() {
+it('sends only as many of a slow host\'s URLs as fit in the waiting budget', function() {
     $settings = LinkAudit::getInstance()->getSettings();
     $settings->minHostDelayMs = 0;
     $settings->maxConcurrentPerHost = 1;
@@ -234,22 +234,30 @@ it('leaves a host out of the batch when its gap could never get through them', f
 
     $urls[] = 'https://example.net/quick';
 
-    $startedAt = microtime(true);
-    $verdicts = linkAuditScheduler(linkAuditTrackingHandler(
+    $scheduler = linkAuditScheduler(linkAuditTrackingHandler(
         static fn(): Response => new Response(200),
         $current,
         $peak,
         $sent,
-    ))->run($urls);
+    ));
+    // Too small for a second thirty-second gap, so only the free first request
+    // fits.
+    $scheduler->maxYieldSeconds = 0.05;
+
+    $startedAt = microtime(true);
+    $verdicts = $scheduler->run($urls);
     $elapsed = microtime(true) - $startedAt;
 
+    sort($sent);
+
     expect($verdicts)->toHaveCount(21)
-        // Nineteen gaps of thirty seconds is nearly ten minutes, so not one of
-        // them was asked. The host on the next domain went out as usual.
-        ->and($sent)->toBe(['https://example.net/quick'])
-        ->and($verdicts['https://example.com/slow-1']->isDeferred())->toBeTrue()
-        ->and($verdicts['https://example.com/slow-1']->reason)->toBe(Verdict::REASON_HOST_BACKOFF)
-        ->and($verdicts['https://example.com/slow-1']->retryAfterSeconds)->toBeGreaterThan(0)
+        // The first request to the slow host goes out, so a learned gap can
+        // still shrink; the rest wait for a later pass.
+        ->and($sent)->toBe(['https://example.com/slow-1', 'https://example.net/quick'])
+        ->and($verdicts['https://example.com/slow-1']->status)->toBe(UrlStatus::Ok)
+        ->and($verdicts['https://example.com/slow-2']->isDeferred())->toBeTrue()
+        ->and($verdicts['https://example.com/slow-2']->reason)->toBe(Verdict::REASON_HOST_BACKOFF)
+        ->and($verdicts['https://example.com/slow-2']->retryAfterSeconds)->toBeGreaterThan(0)
         ->and($verdicts['https://example.net/quick']->status)->toBe(UrlStatus::Ok)
         ->and($elapsed)->toBeLessThan(5.0);
 });
@@ -472,5 +480,86 @@ it('hands back a verdict for every URL it was given, whatever happened', functio
         ->and($verdicts['https://example.com/wobbly']->status)->toBe(UrlStatus::Unreachable)
         // Never requested: the SSRF guard turned it back at the door.
         ->and($verdicts['https://169.254.169.254/latest/meta-data']->status)->toBe(UrlStatus::Unsafe)
-        ->and($sent)->toHaveCount(3);
+        // The 404 is asked twice: a HEAD, then the GET that confirms it.
+        ->and($sent)->toHaveCount(4);
+});
+
+it('stops starting requests once the run time is up', function() {
+    $settings = LinkAudit::getInstance()->getSettings();
+    $settings->minHostDelayMs = 0;
+
+    $current = [];
+    $peak = [];
+    $sent = [];
+
+    $scheduler = linkAuditScheduler(linkAuditTrackingHandler(
+        static fn(): Response => new Response(200),
+        $current,
+        $peak,
+        $sent,
+    ));
+    $scheduler->maxRunSeconds = 0.0;
+
+    $verdicts = $scheduler->run(['https://example.com/a', 'https://example.org/b']);
+
+    expect($sent)->toBe([])
+        ->and($verdicts['https://example.com/a']->isDeferred())->toBeTrue()
+        ->and($verdicts['https://example.org/b']->isDeferred())->toBeTrue();
+});
+
+it('leaves the rest of a host alone once it earns a backoff window mid-run', function() {
+    $settings = LinkAudit::getInstance()->getSettings();
+    $settings->minHostDelayMs = 0;
+    $settings->maxConcurrentPerHost = 1;
+    $settings->concurrency = 1;
+    $settings->retryCount = 0;
+
+    $current = [];
+    $peak = [];
+    $sent = [];
+
+    $urls = [];
+
+    for ($i = 1; $i <= 10; $i++) {
+        $urls[] = "https://down.example/$i";
+    }
+
+    $verdicts = linkAuditScheduler(linkAuditTrackingHandler(
+        static fn(RequestInterface $request) => new ConnectException('cURL error 7: refused', $request),
+        $current,
+        $peak,
+        $sent,
+    ))->run($urls);
+
+    $deferred = array_filter($verdicts, static fn(Verdict $v): bool => $v->isDeferred());
+
+    expect(count($sent))->toBeLessThan(10)
+        ->and($deferred)->not->toBeEmpty()
+        ->and($verdicts)->toHaveCount(10);
+});
+
+it('hands each settled verdict to the callback as it lands', function() {
+    $settings = LinkAudit::getInstance()->getSettings();
+    $settings->minHostDelayMs = 0;
+
+    $current = [];
+    $peak = [];
+    $sent = [];
+    $seen = [];
+
+    linkAuditScheduler(linkAuditTrackingHandler(
+        static fn(): Response => new Response(200),
+        $current,
+        $peak,
+        $sent,
+    ))->run(['https://example.com/a', 'https://example.org/b'], function(string $url, Verdict $verdict) use (&$seen) {
+        $seen[$url] = $verdict->status;
+    });
+
+    ksort($seen);
+
+    expect($seen)->toBe([
+        'https://example.com/a' => UrlStatus::Ok,
+        'https://example.org/b' => UrlStatus::Ok,
+    ]);
 });

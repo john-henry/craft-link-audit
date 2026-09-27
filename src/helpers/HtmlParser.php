@@ -31,7 +31,7 @@ use DOMXPath;
 class HtmlParser
 {
     // =========================================================================
-    // Constants
+    // Const Properties
     // =========================================================================
 
     /**
@@ -104,7 +104,8 @@ class HtmlParser
             }
         }
 
-        return array_keys($names);
+        // PHP turns numeric string keys into ints, and `id="2024"` is still a name.
+        return array_map('strval', array_keys($names));
     }
 
     /**

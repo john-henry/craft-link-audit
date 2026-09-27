@@ -109,7 +109,8 @@ it('keeps the first hop of a longer chain, not the last', function() {
 });
 
 it('calls a 404 broken', function() {
-    $verdict = linkAuditChecker([new Response(404)])->check('https://example.com/gone');
+    // The HEAD's 404 is confirmed with a GET.
+    $verdict = linkAuditChecker([new Response(404), new Response(404)])->check('https://example.com/gone');
 
     expect($verdict->status)->toBe(UrlStatus::Broken)
         ->and($verdict->httpStatus)->toBe(404)
@@ -117,7 +118,7 @@ it('calls a 404 broken', function() {
 });
 
 it('calls a 410 broken', function() {
-    $verdict = linkAuditChecker([new Response(410)])->check('https://example.com/deleted');
+    $verdict = linkAuditChecker([new Response(410), new Response(410)])->check('https://example.com/deleted');
 
     expect($verdict->status)->toBe(UrlStatus::Broken)
         ->and($verdict->httpStatus)->toBe(410)

@@ -35,7 +35,7 @@ use Throwable;
 class CrawlPages extends BaseBatchedJob
 {
     // =========================================================================
-    // Constants
+    // Const Properties
     // =========================================================================
 
     /**
@@ -100,33 +100,6 @@ class CrawlPages extends BaseBatchedJob
     }
 
     // =========================================================================
-    // Private Methods
-    // =========================================================================
-
-    /**
-     * The longest a batch of page fetches can take, in seconds.
-     *
-     * Read off the settings the fetching actually uses, so it follows them
-     * rather than restating a number beside them. Never below the queue's own
-     * setting: an install that raised it did so for a reason.
-     *
-     * @return int Seconds.
-     * @author John Henry Donovan <info@johnhenry.ie>
-     * @since 1.0.0
-     */
-    private function _worstCaseSeconds(): int
-    {
-        $settings = LinkAudit::$plugin->getSettings();
-
-        $perPage = max(1, $settings->timeout)
-            + (int)ceil(max(0, $settings->minHostDelayMs) / 1000);
-
-        $seconds = max(1, $this->batchSize) * $perPage + self::_TTR_MARGIN_SECONDS;
-
-        return max($seconds, (int)Craft::$app->getQueue()->ttr);
-    }
-
-    // =========================================================================
     // Protected Methods
     // =========================================================================
 
@@ -143,6 +116,19 @@ class CrawlPages extends BaseBatchedJob
     }
 
     /**
+     * Holds count-cache invalidation back for the batch, so it happens once
+     * at the end rather than once per URL.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    protected function beforeBatch(): void
+    {
+        LinkAudit::$plugin->getReportService()->holdCountInvalidation();
+    }
+
+    /**
      * Writes the batch's page count to the scan row, before the runner spawns
      * the next batch.
      *
@@ -152,6 +138,8 @@ class CrawlPages extends BaseBatchedJob
      */
     protected function afterBatch(): void
     {
+        LinkAudit::$plugin->getReportService()->releaseCountInvalidation();
+
         if ($this->_crawled === 0) {
             return;
         }
@@ -214,5 +202,32 @@ class CrawlPages extends BaseBatchedJob
         if (LinkAudit::$plugin->getPageCrawler()->crawlPage($item, $this->scanId)) {
             $this->_crawled++;
         }
+    }
+
+    // =========================================================================
+    // Private Methods
+    // =========================================================================
+
+    /**
+     * The longest a batch of page fetches can take, in seconds.
+     *
+     * Read off the settings the fetching actually uses, so it follows them
+     * rather than restating a number beside them. Never below the queue's own
+     * setting: an install that raised it did so for a reason.
+     *
+     * @return int Seconds.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    private function _worstCaseSeconds(): int
+    {
+        $settings = LinkAudit::$plugin->getSettings();
+
+        $perPage = max(1, $settings->timeout)
+            + (int)ceil(max(0, $settings->minHostDelayMs) / 1000);
+
+        $seconds = max(1, $this->batchSize) * $perPage + self::_TTR_MARGIN_SECONDS;
+
+        return max($seconds, (int)Craft::$app->getQueue()->ttr);
     }
 }

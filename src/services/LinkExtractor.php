@@ -10,13 +10,14 @@ use Craft;
 use craft\base\ElementInterface;
 use craft\base\FieldInterface;
 use craft\base\NestedElementInterface;
+use craft\commerce\elements\Product;
+use craft\commerce\elements\Variant;
 use craft\elements\Asset;
 use craft\elements\Category;
 use craft\elements\db\ElementQueryInterface;
 use craft\elements\Entry;
 use craft\fields\BaseRelationField;
 use craft\fields\data\LinkData;
-use craft\helpers\App;
 use craft\helpers\ElementHelper;
 use craft\htmlfield\HtmlFieldData;
 use craft\models\Site;
@@ -105,6 +106,12 @@ class LinkExtractor extends Component
      */
     private array $_visited = [];
 
+    /**
+     * @var string|null The URL of the page being read, which relative links in
+     * its content resolve against, or null when it has no URL of its own.
+     */
+    private ?string $_pageUrl = null;
+
     // =========================================================================
     // Public Methods
     // =========================================================================
@@ -129,6 +136,12 @@ class LinkExtractor extends Component
         }
 
         $root = ElementHelper::rootElement($element);
+
+        try {
+            $this->_pageUrl = $root->getUrl();
+        } catch (Throwable) {
+            $this->_pageUrl = null;
+        }
 
         return $this->_fromElement(
             element: $element,
@@ -159,6 +172,7 @@ class LinkExtractor extends Component
     {
         $this->_baseUrls = [];
         $this->_visited = [];
+        $this->_pageUrl = null;
 
         if (!class_exists(Node::class) || !$this->_settings()->scanNavigationNodes) {
             return [];
@@ -424,8 +438,13 @@ class LinkExtractor extends Component
         }
 
         $found = [];
+        $excludedFieldUids = $this->_settings()->excludedFieldUids;
 
         foreach ($layout->getCustomFields() as $field) {
+            if (in_array($field->uid, $excludedFieldUids, true)) {
+                continue;
+            }
+
             try {
                 $found[] = $this->_fromValue(
                     value: $element->getFieldValue($field->handle),
@@ -439,6 +458,20 @@ class LinkExtractor extends Component
                     "Skipped field {$field->handle} on element {$element->id}: {$e->getMessage()}",
                     'link-audit',
                 );
+            }
+        }
+
+        // A product's variants are nested elements, but they hang off the
+        // product itself rather than a custom field, so the walk above never
+        // reaches them.
+        if (
+            $element instanceof Product
+            && in_array(Variant::class, $this->_settings()->resolvedScannedElementTypes(), true)
+        ) {
+            foreach ($element->getVariants(true) as $variant) {
+                if ($this->_isLive($variant)) {
+                    $found[] = $this->_fromElement($variant, $ownerElementId, $depth + 1);
+                }
             }
         }
 
@@ -804,9 +837,11 @@ class LinkExtractor extends Component
         }
 
         $siteId = $element->getSite()->id;
+        // A relative href means what a browser on the page would take it to
+        // mean, so it resolves against the page's own URL where it has one.
         $normalised = UrlNormaliser::normalise(
             $rawHref,
-            $this->_baseUrlFor($siteId),
+            $this->_pageUrl ?? $this->_baseUrlFor($siteId),
             $this->_settings()->stripTrackingParams,
         );
 
@@ -817,14 +852,18 @@ class LinkExtractor extends Component
                 return null;
             }
 
+            // Credentials in a link such as `ftp://user:pass@host` stay out of
+            // the report and the export.
+            $withoutCredentials = preg_replace('#^([a-z][a-z0-9+.-]*://)[^/?\#@]*@#i', '$1', $rawHref) ?? $rawHref;
+
             return new ExtractedLink(
                 kind: LinkKind::Ignored,
                 elementId: (int)$element->id,
                 elementType: $element::class,
                 ownerElementId: $ownerElementId,
                 siteId: $siteId,
-                url: $rawHref,
-                rawHref: $rawHref,
+                url: $withoutCredentials,
+                rawHref: $withoutCredentials,
                 fieldUid: $field?->uid,
                 fieldHandle: $field?->handle,
                 linkText: HtmlParser::tidyLinkText($linkText),
@@ -1056,9 +1095,13 @@ class LinkExtractor extends Component
             }
         }
 
-        $url = trim((string)App::parseEnv((string)$node->getRawUrl()));
+        // The raw URL is read as typed. Expanding `$VAR` or `@alias` here would let
+        // anyone who can edit a menu have the server send its environment
+        // variables to a host of their choosing, so a URL that uses either, or a
+        // `{` Twig placeholder, is left alone.
+        $url = trim((string)$node->getRawUrl());
 
-        if ($url === '' || str_contains($url, '{')) {
+        if ($url === '' || str_contains($url, '{') || str_contains($url, '$') || str_starts_with($url, '@')) {
             return null;
         }
 

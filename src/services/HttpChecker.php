@@ -16,6 +16,7 @@ use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\events\DefineVerdictEvent;
 use johnhenry\linkaudit\exceptions\UnsafeUrlException;
 use johnhenry\linkaudit\helpers\BotBlockHeuristics;
+use johnhenry\linkaudit\helpers\CappedStream;
 use johnhenry\linkaudit\helpers\UrlSafety;
 use johnhenry\linkaudit\LinkAudit;
 use johnhenry\linkaudit\models\Verdict;
@@ -60,6 +61,13 @@ class HttpChecker extends Component
     public const EVENT_DEFINE_VERDICT = 'defineVerdict';
 
     /**
+     * @var int Longest `Retry-After` honoured, in seconds. A server asking for
+     * longer is checked again after a day; the raw value can overflow a date
+     * column and stop the scan.
+     */
+    public const MAX_RETRY_AFTER_SECONDS = 86400;
+
+    /**
      * @var int How many bytes of a GET response body are read, to look for a
      * bot-block signature the headers did not carry.
      */
@@ -73,11 +81,12 @@ class HttpChecker extends Component
 
     /**
      * @var int[] Status codes worth one GET before they are believed: a 400 or
-     * 403 is often a server that dislikes the method rather than the URL, and a
-     * 503 is where a CAPTCHA hides. Only retried when nothing in the headers
+     * 403 is often a server that dislikes the method rather than the URL, some
+     * servers answer every HEAD with a 404 or 410, and a 503 is where a CAPTCHA
+     * hides. Only retried when nothing in the headers
      * already says the refusal was aimed at robots.
      */
-    private const _HEAD_SUSPECT_STATUSES = [400, 403, 503];
+    private const _HEAD_SUSPECT_STATUSES = [400, 403, 404, 410, 503];
 
     /**
      * @var string The Range header sent with the GET fallback.
@@ -163,7 +172,7 @@ class HttpChecker extends Component
         if ($this->_client === null) {
             // Craft's own Guzzle config is the base, so a project's config/guzzle.php
             // still applies. Everything this plugin decides is passed per request.
-            $this->_client = Craft::createGuzzleClient();
+            $this->_client = Craft::createGuzzleClient(['handler' => UrlSafety::pinnedHandlerStack()]);
         }
 
         return $this->_client;
@@ -270,6 +279,7 @@ class HttpChecker extends Component
 
         try {
             $body = $response->getBody();
+            $body->rewind();
             $snippet = $body->read(self::_BODY_SNIPPET_BYTES);
             $body->close();
         } catch (Throwable $e) {
@@ -483,6 +493,20 @@ class HttpChecker extends Component
             );
         }
 
+        // A login wall says nothing about whether the page is there.
+        if ($status === 401 || $status === 407) {
+            return new Verdict(
+                status: UrlStatus::Blocked,
+                httpStatus: $status,
+                method: $method,
+                finalUrl: $redirectCount > 0 ? $finalUrl : null,
+                redirectCount: $redirectCount,
+                reason: Verdict::REASON_HTTP,
+                message: 'This page needs a login, so whether it works can\'t be checked from here.',
+                responseTimeMs: $elapsedMs,
+            );
+        }
+
         // Everything else the server answered with, 404 and 410 first among
         // them, is the link being wrong.
         return new Verdict(
@@ -609,7 +633,7 @@ class HttpChecker extends Component
         }
 
         if (ctype_digit($value)) {
-            return (int)$value;
+            return min(self::MAX_RETRY_AFTER_SECONDS, (int)substr($value, 0, 9));
         }
 
         $timestamp = strtotime($value);
@@ -618,7 +642,7 @@ class HttpChecker extends Component
             return null;
         }
 
-        return max(0, $timestamp - time());
+        return min(self::MAX_RETRY_AFTER_SECONDS, max(0, $timestamp - time()));
     }
 
     /**
@@ -658,11 +682,12 @@ class HttpChecker extends Component
         }
 
         if ($method === 'GET') {
-            // Ask for the first couple of kilobytes and stream them, so a server
-            // that ignores the Range header still costs nothing: the body is
-            // closed the moment the headers have been read.
+            // Ask for the first couple of kilobytes, and keep no more than that
+            // of whatever a server that ignores the Range header sends. It goes
+            // through cURL, not Guzzle's stream handler, so the request timeout
+            // covers the whole transfer rather than each read.
             $options[RequestOptions::HEADERS]['Range'] = self::_RANGE_HEADER;
-            $options[RequestOptions::STREAM] = true;
+            $options[RequestOptions::SINK] = new CappedStream(self::_BODY_SNIPPET_BYTES);
         }
 
         return $options;
@@ -764,8 +789,10 @@ class HttpChecker extends Component
      * on.
      *
      * A 405 or 501 is the server saying it does not do HEAD. A 400 or 403 is
-     * often the same thing said badly. A 503 is where a CAPTCHA hides, and only
-     * a body can tell that from a server that is genuinely having a bad day.
+     * often the same thing said badly, and some servers answer every HEAD with
+     * a 404 or 410, so those are confirmed before a link is called broken. A
+     * 503 is where a CAPTCHA hides, and only a body can tell that from a server
+     * that is genuinely having a bad day.
      *
      * @param string $url The URL that was requested.
      * @param array{method: string, response: ResponseInterface|null, error: Throwable|null, elapsedMs: int} $outcome

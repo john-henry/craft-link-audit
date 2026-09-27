@@ -35,20 +35,17 @@ use yii\base\InvalidConfigException;
 class BrokenLinksWidget extends Widget
 {
     // =========================================================================
-    // Properties
+    // Public Properties
     // =========================================================================
 
     /**
-     * The site the counts are scoped to, or null to cover every site the
-     * reader may edit.
+     * @var int|null The site the counts are scoped to, or null to cover every
+     * site the reader may edit.
      *
      * The dashboard has no site switcher over it, so without this the widget's
      * numbers could never agree with the Overview on a multi-site install: the
      * Overview reads one site, the widget would read them all. Scoping the
      * widget to a site makes the two screens tell the same story.
-     *
-     * @author John Henry Donovan <info@johnhenry.ie>
-     * @since 1.0.0
      */
     public ?int $siteId = null;
 
@@ -132,8 +129,8 @@ class BrokenLinksWidget extends Widget
      * @return string|null The widget body, or null when it has nothing it is
      *                     allowed to say.
      * @throws InvalidConfigException
-     * @since 1.0.0
      * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
      */
     public function getBodyHtml(): ?string
     {

@@ -528,7 +528,17 @@ class UrlNormaliser
             $host = is_string($ascii) && $ascii !== '' ? $ascii : $host;
         }
 
-        return strlen($host) > self::_MAX_HOST_OCTETS ? '' : $host;
+        if (strlen($host) > self::_MAX_HOST_OCTETS) {
+            return '';
+        }
+
+        // Only a DNS name or a bracketed IPv6 literal is a host. Anything else,
+        // markup included, is refused before it reaches storage or DNS.
+        if (preg_match('/^(?:[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?\.)*[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?\.?$|^\[[0-9a-f:.]+\]$/', $host) !== 1) {
+            return '';
+        }
+
+        return $host;
     }
 
     /**

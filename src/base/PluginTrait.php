@@ -8,8 +8,11 @@ namespace johnhenry\linkaudit\base;
 
 use Craft;
 use craft\base\Element;
+use craft\db\Query;
+use craft\db\Table;
 use craft\errors\SiteNotFoundException;
 use craft\events\DefineHtmlEvent;
+use craft\events\ModelEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
@@ -18,6 +21,7 @@ use craft\helpers\ElementHelper;
 use craft\helpers\Queue as QueueHelper;
 use craft\helpers\UrlHelper;
 use craft\log\MonologTarget;
+use craft\queue\Queue;
 use craft\services\Dashboard;
 use craft\services\Gc;
 use craft\services\UserPermissions;
@@ -36,6 +40,7 @@ use Throwable;
 use yii\base\Event;
 use yii\base\InvalidConfigException;
 use yii\base\InvalidRouteException;
+use yii\queue\ExecEvent;
 
 /**
  * Wires the plugin's event listeners and lifecycle overrides.
@@ -159,8 +164,8 @@ trait PluginTrait
      *
      * @return mixed The redirect.
      * @throws InvalidRouteException
-     * @since 1.0.0
      * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
      */
     public function getReadOnlySettingsResponse(): mixed
     {
@@ -370,8 +375,8 @@ trait PluginTrait
      * @return int|null The element id to reread, or null when this save is not
      *                  worth a job.
      * @throws InvalidConfigException
-     * @since 1.0.0
      * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
      */
     private static function _pageToReread(Element $element): ?int
     {
@@ -402,7 +407,9 @@ trait PluginTrait
             return null;
         }
 
-        if (!$root->enabled || ElementHelper::isDraftOrRevision($root)) {
+        // A disabled root still gets a job: rereading it is what clears its
+        // links off the report, since the scan query no longer returns it.
+        if (ElementHelper::isDraftOrRevision($root)) {
             return null;
         }
 
@@ -521,9 +528,15 @@ trait PluginTrait
                 return;
             }
 
-            // A draft or a revision has no references of its own, and the
-            // canonical element's would be reported here as though they were
-            // this version's.
+            // Editing a live entry works on a provisional draft, and the
+            // canonical entry's links are the ones on the report.
+            if ($element->isProvisionalDraft) {
+                $element = $element->getCanonical();
+            }
+
+            // A saved draft or a revision has no references of its own, and
+            // the canonical element's would be reported here as though they
+            // were this version's.
             if (ElementHelper::isDraftOrRevision($element)) {
                 return;
             }
@@ -559,26 +572,26 @@ trait PluginTrait
             // is an author who cannot edit their page.
             try {
                 $summary = LinkAudit::$plugin->getReportService()->elementSummary(
-                        (int)$element->id,
-                        (int)$site->id,
-                    );
+                    (int)$element->id,
+                    (int)$site->id,
+                );
 
                 $e->html .= Craft::$app->getView()->renderTemplate(
-                        'link-audit/_sidebar/links-panel',
-                        [
-                            'element' => $element,
-                            'site' => $site,
-                            'summary' => $summary,
-                            'canRunScans' => Craft::$app->getUser()->checkPermission(
-                                BaseController::PERMISSION_RUN_SCANS,
-                            ),
-                        ],
-                    );
+                    'link-audit/_sidebar/links-panel',
+                    [
+                        'element' => $element,
+                        'site' => $site,
+                        'summary' => $summary,
+                        'canRunScans' => Craft::$app->getUser()->checkPermission(
+                            BaseController::PERMISSION_RUN_SCANS,
+                        ),
+                    ],
+                );
             } catch (Throwable $err) {
                 Craft::error(
-                        "Could not render the links panel for element $element->id: " . $err->getMessage(),
-                        'link-audit',
-                    );
+                    "Could not render the links panel for element $element->id: " . $err->getMessage(),
+                    'link-audit',
+                );
             }
         };
 
@@ -631,6 +644,55 @@ trait PluginTrait
             } catch (Throwable $e) {
                 Craft::error('Could not queue the scheduled scan: ' . $e->getMessage(), 'link-audit');
             }
+
+            try {
+                LinkAudit::$plugin->getScanService()->pruneHistory();
+            } catch (Throwable $e) {
+                Craft::error('Could not prune the scan history: ' . $e->getMessage(), 'link-audit');
+            }
+        });
+    }
+
+    /**
+     * Listens to the queue: a scan job that fails for good marks its scan
+     * failed, and per-job state (the extraction memo, any held count
+     * invalidation) is cleared between jobs.
+     *
+     * The memo stops one request queueing the same element twice. A web queue
+     * runner runs several jobs in one request, so without the reset a second
+     * import saving the same element would never have it reread.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    private function _registerQueueEvents(): void
+    {
+        Event::on(Queue::class, Queue::EVENT_AFTER_ERROR, static function(ExecEvent $event): void {
+            $job = $event->job;
+
+            LinkAudit::$plugin->getReportService()->releaseCountInvalidation(all: true);
+
+            if (
+                $event->retry
+                || $job === null
+                || !str_starts_with($job::class, 'johnhenry\\linkaudit\\jobs\\')
+                || !property_exists($job, 'scanId')
+            ) {
+                return;
+            }
+
+            $scanId = (int)$job->scanId;
+
+            if ($scanId > 0) {
+                LinkAudit::$plugin->getScanService()->markFailed($scanId);
+            }
+        });
+
+        Event::on(Queue::class, Queue::EVENT_AFTER_EXEC, static function(): void {
+            self::$_queuedForExtraction = [];
+            LinkAudit::$plugin->getInternalResolver()->clearMemo();
+            LinkAudit::$plugin->getReportService()->releaseCountInvalidation(all: true);
         });
     }
 
@@ -729,7 +791,11 @@ trait PluginTrait
                 // page should not be told their page could not be deleted
                 // because a link audit table would not tidy itself up.
                 try {
-                    LinkAudit::$plugin->getUrlStore()->deleteReferencesForElement((int)$element->id);
+                    $store = LinkAudit::$plugin->getUrlStore();
+                    $store->deleteReferencesForElement((int)$element->id);
+                    // Links elsewhere that point at the deleted page are now
+                    // broken, so they go to the front of the next check.
+                    $store->bringForwardLinksTo((int)$element->id);
                 } catch (Throwable $err) {
                     Craft::error(
                         "Could not clear the links held against deleted element $element->id: "
@@ -739,6 +805,55 @@ trait PluginTrait
                 }
             },
         );
+    }
+
+    /**
+     * Brings forward the check on links pointing at a page whose URI is about
+     * to change, so a moved page's old address is rechecked on the next run.
+     *
+     * Runs before the save because that is the last moment the old URI can be
+     * read from the database.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    private function _registerUriChangeRecheck(): void
+    {
+        Event::on(Element::class, Element::EVENT_BEFORE_SAVE, static function(ModelEvent $e): void {
+            $element = $e->sender;
+
+            if (
+                !$element instanceof Element
+                || $element->id === null
+                || $element->uri === null
+                || ElementHelper::isDraftOrRevision($element)
+            ) {
+                return;
+            }
+
+            try {
+                $oldUri = (new Query())
+                    ->select(['uri'])
+                    ->from([Table::ELEMENTS_SITES])
+                    ->where(['elementId' => $element->id, 'siteId' => $element->siteId])
+                    ->scalar();
+
+                if (!is_string($oldUri) || $oldUri === $element->uri) {
+                    return;
+                }
+
+                LinkAudit::$plugin->getUrlStore()->bringForwardLinksTo(
+                    (int)$element->id,
+                    [(int)$element->siteId => $oldUri],
+                );
+            } catch (Throwable $err) {
+                Craft::error(
+                    "Could not bring forward the links to element $element->id: " . $err->getMessage(),
+                    'link-audit',
+                );
+            }
+        });
     }
 
     /**

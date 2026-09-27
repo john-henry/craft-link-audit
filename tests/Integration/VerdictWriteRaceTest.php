@@ -84,7 +84,7 @@ it('reads again rather than writing its stale count a second time', function() {
     // The read has to sit inside the loop: retrying with the same stale values
     // would fail the same way for ever.
     $loopAt = strpos($body, 'for ($attempt');
-    $readAt = strpos($body, "->select(['failCount', 'status'])");
+    $readAt = strpos($body, "->select(['failCount', 'status', 'reason'])");
 
     expect($loopAt)->not->toBeFalse()
         ->and($readAt)->not->toBeFalse()

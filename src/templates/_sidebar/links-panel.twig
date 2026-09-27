@@ -19,6 +19,8 @@
 .link-audit-panel__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 12px 18px; }
 {% endcss %}
 
+<div id="link-audit-panel-announcer" class="visually-hidden" role="status" aria-live="polite"></div>
+
 <fieldset>
     <legend class="h6 link-audit-panel__legend">
         <span>{{ 'Link Audit'|t('link-audit') }}</span>
@@ -144,6 +146,30 @@ window.LinkAuditBlockHash = window.location.hash;
         }
     }
 
+    // Translated on the server: the plugin's JS translations are only
+    // registered on its own screens, and this panel is on Craft's.
+    var foundMessage = '{{ 'Found the link on the page.'|t('link-audit')|e('js') }}';
+    var notFoundMessage = '{{ "This occurrence couldn't be located on the page. It may have moved, or the block containing it may not have loaded yet."|t('link-audit')|e('js') }}';
+
+    // Craft.cp.announce reads the CP's own live region, so it survives the
+    // element editor swapping panes in and out from under a locally-declared
+    // one. Where it is not there to call, the panel's own region is the
+    // fallback: a plain textContent write is enough for aria-live="polite" to
+    // pick it up.
+    function announce(message) {
+        if (window.Craft && Craft.cp && typeof Craft.cp.announce === 'function') {
+            Craft.cp.announce(message);
+
+            return;
+        }
+
+        var region = document.getElementById('link-audit-panel-announcer');
+
+        if (region) {
+            region.textContent = message;
+        }
+    }
+
     function flash(target) {
         revealTab(target);
         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -151,6 +177,16 @@ window.LinkAuditBlockHash = window.location.hash;
         target.style.outlineOffset = '3px';
         target.style.boxShadow = '0 0 0 6px rgba(224, 50, 110, 0.15)';
         target.style.borderRadius = 'var(--large-border-radius, 5px)';
+
+        // A Matrix block or field container carries no tabindex of its own;
+        // the anchor found inside it does. Only the fallback (the container
+        // itself) needs one added to take focus programmatically.
+        if (target.tabIndex < 0 && !target.hasAttribute('tabindex')) {
+            target.setAttribute('tabindex', '-1');
+        }
+
+        target.focus({ preventScroll: true });
+        announce(foundMessage);
 
         window.setTimeout(function() {
             target.style.outline = '';
@@ -225,8 +261,12 @@ window.LinkAuditBlockHash = window.location.hash;
 
                 if (fallback) {
                     flash(anchorWithin(fallback, rawHref, linkText) || fallback);
+
+                    return;
                 }
             }
+
+            announce(notFoundMessage);
         }
 
         window.setTimeout(attempt, 250);

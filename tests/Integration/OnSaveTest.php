@@ -196,7 +196,7 @@ it('queues nothing when scanning on save is off', function() {
 
 it('queues nothing for an element whose URI is excluded', function() {
     LinkAudit::getInstance()->getSettings()->excludedUriPatterns = [
-        ['uriPattern' => '^la-fixture/la-on-save-excluded', 'siteId' => '', 'enabled' => true],
+        ['uriPattern' => '^la-fixture/la-on-save-excluded', 'siteUid' => '', 'enabled' => true],
     ];
 
     $before = onSaveJobCount();

@@ -12,35 +12,65 @@ use johnhenry\linkaudit\models\ExtractedLink;
 use markhuot\craftpest\factories\Entry as EntryFactory;
 use verbb\navigation\elements\Node;
 use verbb\navigation\Navigation;
-use verbb\navigation\nodetypes\CustomType;
-use verbb\navigation\nodetypes\PassiveType;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Navigation 4 renamed navs to menus and gave each node type its own class, so
+// these helpers answer the same question under either version.
+
+/** Every navigation (Navigation 3) or menu (Navigation 4) in the project. */
+function navAll(): array
+{
+    $plugin = Navigation::$plugin ?? null;
+
+    if ($plugin === null) {
+        return [];
+    }
+
+    return method_exists($plugin, 'getMenus')
+        ? $plugin->getMenus()->getAllMenus()
+        : $plugin->getNavs()->getAllNavs();
+}
+
 /** Whether verbb/navigation is installed and has a navigation to hang nodes off. */
 function navInstalled(): bool
 {
-    return class_exists(Node::class)
-        && class_exists(Navigation::class)
-        && Navigation::$plugin?->getNavs()->getAllNavs() !== [];
+    return class_exists(Node::class) && class_exists(Navigation::class) && navAll() !== [];
 }
 
 /** The first navigation in the project. */
 function navFirst(): object
 {
-    return Navigation::$plugin->getNavs()->getAllNavs()[0];
+    return array_values(navAll())[0];
+}
+
+/** The node type class for a custom URL, a passive node or an entry. */
+function navType(string $kind): string
+{
+    $v4 = [
+        'custom' => 'verbb\\navigation\\nodetypes\\Custom',
+        'passive' => 'verbb\\navigation\\nodetypes\\Passive',
+        'entry' => 'verbb\\navigation\\nodetypes\\Entry',
+    ];
+    $v3 = [
+        'custom' => 'verbb\\navigation\\nodetypes\\CustomType',
+        'passive' => 'verbb\\navigation\\nodetypes\\PassiveType',
+        'entry' => Entry::class,
+    ];
+
+    return class_exists($v4['custom']) ? $v4[$kind] : $v3[$kind];
 }
 
 /** Saves a node in the first navigation and returns it. */
 function navNode(array $config): Node
 {
     $node = new Node(array_merge([
-        'navId' => navFirst()->id,
+        (property_exists(Node::class, 'menuId') ? 'menuId' : 'navId') => navFirst()->id,
         'siteId' => Craft::$app->getSites()->getPrimarySite()->id,
         'enabled' => true,
-        'type' => CustomType::class,
+        'type' => navType('custom'),
     ], $config));
 
     if (!Craft::$app->getElements()->saveElement($node)) {
@@ -114,7 +144,7 @@ it('reads an entry node as an element link', function() {
     $entry = navEntry();
     $node = navNode([
         'title' => 'An entry link',
-        'type' => Entry::class,
+        'type' => navType('entry'),
         'elementId' => $entry->id,
     ]);
 
@@ -129,7 +159,7 @@ it('reads an entry node as an element link', function() {
 it('has nothing to say about a passive node', function() {
     $node = navNode([
         'title' => 'Just a heading',
-        'type' => PassiveType::class,
+        'type' => navType('passive'),
     ]);
 
     expect(navLinksFor($node))->toBe([]);

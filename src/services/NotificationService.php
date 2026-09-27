@@ -176,6 +176,7 @@ class NotificationService extends Component
         try {
             $this->getClient()->request('POST', $webhookUrl, [
                 RequestOptions::TIMEOUT => self::_WEBHOOK_TIMEOUT,
+                RequestOptions::ALLOW_REDIRECTS => false,
                 RequestOptions::HEADERS => ['Content-Type' => 'application/json'],
                 RequestOptions::BODY => Json::encode([
                     'username' => Craft::t('link-audit', 'Link Audit'),

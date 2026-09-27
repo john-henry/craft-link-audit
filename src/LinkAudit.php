@@ -73,7 +73,7 @@ class LinkAudit extends BasePlugin
     /**
      * @inheritdoc
      */
-    public string $schemaVersion = '1.0.0';
+    public string $schemaVersion = '1.0.1';
 
     // =========================================================================
     // Public Methods
@@ -104,6 +104,7 @@ class LinkAudit extends BasePlugin
         // imported with a broken link in it is exactly the one worth catching.
         $this->_registerScanOnSave();
         $this->_registerReferenceCleanup();
+        $this->_registerUriChangeRecheck();
         // The mirror of the cleanup above, so a page pulled back out of the bin
         // gets its links back with it. Restores happen in a console command as
         // readily as they do in the control panel.
@@ -111,6 +112,7 @@ class LinkAudit extends BasePlugin
         // Garbage collection is mostly a console job, so this would be dead
         // weight registered for the control panel alone.
         $this->_registerGarbageCollection();
+        $this->_registerQueueEvents();
         $this->_registerWidgetTypes();
 
         if (Craft::$app instanceof ConsoleApplication) {

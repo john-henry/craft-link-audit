@@ -125,9 +125,9 @@ it('spots the other vendors by their fingerprints', function(array $headers, str
 ]);
 
 it('does not mistake an ordinary CloudFront 404 for a firewall', function() {
-    $verdict = linkAuditBlockChecker([
-        new Response(404, ['x-cache' => 'Error from cloudfront', 'via' => '1.1 abc.cloudfront.net (CloudFront)']),
-    ])->check('https://example.com/really-gone');
+    $cloudFront404 = new Response(404, ['x-cache' => 'Error from cloudfront', 'via' => '1.1 abc.cloudfront.net (CloudFront)']);
+    // The HEAD's 404 is confirmed with a GET.
+    $verdict = linkAuditBlockChecker([$cloudFront404, $cloudFront404])->check('https://example.com/really-gone');
 
     expect($verdict->status)->toBe(UrlStatus::Broken)
         ->and($verdict->httpStatus)->toBe(404);
@@ -196,8 +196,8 @@ it('lets a listener overrule the checker', function() {
         },
     );
 
-    $overruled = linkAuditBlockChecker([new Response(404)])->check('https://example.com/known-awkward');
-    $untouched = linkAuditBlockChecker([new Response(404)])->check('https://example.com/ordinary');
+    $overruled = linkAuditBlockChecker([new Response(404), new Response(404)])->check('https://example.com/known-awkward');
+    $untouched = linkAuditBlockChecker([new Response(404), new Response(404)])->check('https://example.com/ordinary');
 
     expect($overruled->status)->toBe(UrlStatus::Ignored)
         ->and($overruled->message)->toBe('This one always answers 404 for robots.')

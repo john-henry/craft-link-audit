@@ -167,10 +167,10 @@
     {% if craft.app.isMultiSite %}
         {% set siteOptions = [{ value: '', label: 'All sites'|t('link-audit') }] %}
         {% for s in craft.app.sites.getAllSites() %}
-            {% set siteOptions = siteOptions|merge([{ value: s.id, label: s.name }]) %}
+            {% set siteOptions = siteOptions|merge([{ value: s.uid, label: s.name }]) %}
         {% endfor %}
         {% set uriCols = uriCols|merge({
-            siteId: { type: 'select', heading: 'Site'|t('link-audit'), options: siteOptions, thin: true },
+            siteUid: { type: 'select', heading: 'Site'|t('link-audit'), options: siteOptions, thin: true },
         }) %}
     {% endif %}
     {% set uriPatternInfo = 'A regular expression, tested against the URI with no leading slash. The homepage is `^$`.'|t('link-audit')
@@ -241,6 +241,20 @@
             disabled: readOnly or config.excludedCategoryGroupUids is defined,
         }) }}
     {% endif %}
+
+    {{ forms.selectizeField({
+        label: 'Excluded Fields'|t('link-audit'),
+        instructions: 'Fields whose content is never read for links. Type to search by name or handle.'|t('link-audit')
+            ~ ' <span class="info">' ~ 'Handy for a field that holds old content nobody is going to fix, like a legacy body kept after a migration. Leaving out a Matrix field leaves out everything inside it too. The rendered crawl reads pages rather than fields, so it will still find links a template prints from one of these.'|t('link-audit') ~ '</span>',
+        id: 'excludedFieldUids',
+        name: 'settings[excludedFieldUids]',
+        options: linkFieldOptions,
+        values: settings.excludedFieldUids,
+        multi: true,
+        selectizeOptions: { placeholder: 'Choose fields'|t('link-audit') },
+        warning: config.excludedFieldUids is defined ? 'Set in config/link-audit.php.'|t('link-audit'),
+        disabled: readOnly or config.excludedFieldUids is defined,
+    }) }}
 
     {{ forms.editableTableField({
         label: 'Always Valid Internal URLs'|t('link-audit'),

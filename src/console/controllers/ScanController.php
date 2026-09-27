@@ -227,7 +227,8 @@ class ScanController extends Controller
      */
     public function actionIncremental(): int
     {
-        $since = LinkAudit::$plugin->getScanService()->lastCompletedScanStart();
+        $service = LinkAudit::$plugin->getScanService();
+        $since = $service->lastCompletedScanStart($service->siteIds($this->_siteId()));
 
         if ($since === null) {
             $this->stdout(
@@ -256,10 +257,7 @@ class ScanController extends Controller
         if ($days <= 0) {
             $this->stdout("Retention is off, so no scan history was pruned.\n", Console::FG_YELLOW);
         } else {
-            $cutOff = DateTimeHelper::now()->modify("-$days days");
-            $scans = Craft::$app->getDb()->createCommand()
-                ->delete(ScanRecord::tableName(), ['<', 'dateCreated', Db::prepareDateForDb($cutOff)])
-                ->execute();
+            $scans = LinkAudit::$plugin->getScanService()->pruneHistory($days);
 
             $this->stdout(
                 sprintf("Removed %d scans older than %d days.\n", $scans, $days),
@@ -517,7 +515,7 @@ class ScanController extends Controller
         $service = LinkAudit::$plugin->getScanService();
         $siteIds = $service->siteIds($siteId);
 
-        $since = $mode === ScanMode::Incremental ? $service->lastCompletedScanStart() : null;
+        $since = $mode === ScanMode::Incremental ? $service->lastCompletedScanStart($siteIds) : null;
         $elements = (int)$service->elementQuery($siteIds, $since)->count();
 
         try {

@@ -705,19 +705,25 @@ class ExportService extends Component
         $fieldElement = $elements[$this->_referenceKey($row)] ?? null;
         $site = Craft::$app->getSites()->getSiteById((int)$row['siteId']);
         $source = (string)$row['source'];
+        $user = Craft::$app->getUser()->getIdentity();
+
+        // A page this user can't open is named as such and nothing more, the
+        // same as on screen. The console export runs with no user, as the
+        // server's operator, and sees everything.
+        $hidden = $element !== null && $user !== null && !$element->canView($user);
 
         $cells = [
             // An element that will not load leaves its columns blank rather
             // than guessed at. It means the page has gone since the last scan,
             // and its id would be no use to anybody opening this file to fix
             // content.
-            $element?->getUiLabel(),
-            $element !== null ? $report->referenceEditUrl($element, $row, $fieldElement) : null,
-            $element?->getUrl(),
+            $hidden ? Craft::t('link-audit', 'A page you can’t view') : $element?->getUiLabel(),
+            $element !== null && !$hidden ? $report->referenceEditUrl($element, $row, $fieldElement) : null,
+            $hidden ? null : $element?->getUrl(),
             $report->elementTypeLabel((string)$row['elementType']),
             $site?->name,
-            $report->fieldName($row, $fieldElement),
-            $row['linkText'],
+            $hidden ? null : $report->fieldName($row, $fieldElement),
+            $hidden ? null : $row['linkText'],
             $row['url'],
             $status->label(),
             Verdict::reasonLabel($row['reason'] !== null ? (string)$row['reason'] : null),

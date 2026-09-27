@@ -84,17 +84,17 @@ abstract class BaseController extends Controller
      * A different decision from running a scan: an ignore changes what every
      * other editor sees from then on.
      */
-    public const PERMISSION_MANAGE_IGNORES = 'link-audit:manageIgnores';
+    public const PERMISSION_MANAGE_IGNORES = 'link-audit:manage-ignores';
 
     /**
      * @var string Queue a scan, or ask for one URL to be checked again.
      */
-    public const PERMISSION_RUN_SCANS = 'link-audit:runScans';
+    public const PERMISSION_RUN_SCANS = 'link-audit:run-scans';
 
     /**
      * @var string Read the reports: the overview, the lists and the URL detail.
      */
-    public const PERMISSION_VIEW_REPORTS = 'link-audit:viewReports';
+    public const PERMISSION_VIEW_REPORTS = 'link-audit:view-reports';
 
     // =========================================================================
     // Protected Properties

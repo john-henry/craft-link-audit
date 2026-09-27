@@ -6,7 +6,8 @@
 
 namespace johnhenry\linkaudit\helpers;
 
-use Craft;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Promise\Create;
 use johnhenry\ipguard\Dns;
 use johnhenry\ipguard\IpRange;
 use johnhenry\linkaudit\exceptions\UnsafeUrlException;
@@ -62,9 +63,9 @@ class UrlSafety
 
     /**
      * @var array<string, string[]> Hosts already resolved this process, keyed by
-     * lowercased host. A queue worker is short lived, so this cannot go stale
-     * for long, and holding one answer per host also narrows the window a DNS
-     * rebinding attack has to work in.
+     * lowercased host. The address checked here is the one the connection is
+     * pinned to (see pinningMiddleware()), so a second lookup can't swap in a
+     * private one.
      */
     private static array $_resolved = [];
 
@@ -75,20 +76,52 @@ class UrlSafety
     /**
      * Asserts that a hostname (or IP literal) resolves only to public addresses.
      *
+     * The install's own sites are exempt, but only on their exact scheme, host
+     * and port: another port on the same host is another service.
+     *
      * @param string $host The hostname or IP literal to validate.
+     * @param string $scheme The URL's scheme.
+     * @param int|null $port The URL's port, or null for the scheme's default.
      * @return void
      * @throws UnsafeUrlException If the host resolves to a private or reserved
      *                            address, or cannot be resolved at all.
      * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    public static function assertHostIsPublic(string $host): void
+    public static function assertHostIsPublic(string $host, string $scheme = 'https', ?int $port = null): void
     {
-        // Exempt hosts this install actually serves: the site's own hostname
-        // comes from Craft's site config, not from user input, and local or
-        // intranet installs legitimately resolve to private addresses.
-        if (self::_isOwnSiteHost($host)) {
-            return;
+        self::publicAddressFor($host, $scheme, $port);
+    }
+
+    /**
+     * Resolves a host, checks every address it has is public, and returns the
+     * one to connect to.
+     *
+     * @param string $host The hostname or IP literal.
+     * @param string $scheme The URL's scheme.
+     * @param int|null $port The URL's port, or null for the scheme's default.
+     * @return string|null The address to pin the connection to, or null where
+     *                     there's nothing to pin (an IP literal, or one of the
+     *                     install's own sites).
+     * @throws UnsafeUrlException If the host is private, reserved or unresolvable.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    public static function publicAddressFor(string $host, string $scheme = 'https', ?int $port = null): ?string
+    {
+        // A local or intranet install legitimately resolves to a private
+        // address, so its own sites are exempt, on their exact origin only.
+        if (IpRange::isOwnSiteOrigin($scheme, $host, $port)) {
+            return null;
+        }
+
+        if (preg_match('/^[0-9]+$|^0x[0-9a-f]+$/i', trim($host, '[]')) === 1) {
+            // `2130706433` or `0x7f000001` is 127.0.0.1 to cURL, but DNS may
+            // answer it through a search domain with something public.
+            throw new UnsafeUrlException(
+                'The host is a numeric address in a form that is not allowed.',
+                UnsafeUrlException::REASON_PRIVATE_IP,
+            );
         }
 
         $ips = self::_resolveHost($host);
@@ -108,6 +141,78 @@ class UrlSafety
                 );
             }
         }
+
+        if (filter_var(trim($host, '[]'), FILTER_VALIDATE_IP)) {
+            return null;
+        }
+
+        foreach ($ips as $ip) {
+            if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                return $ip;
+            }
+        }
+
+        return $ips[0];
+    }
+
+    /**
+     * Guzzle middleware that checks every request it sees, redirect hops
+     * included, and pins the connection to the address that was checked.
+     *
+     * Without the pin cURL resolves the host a second time, and a host that
+     * answers the check with a public address and the connection with a
+     * private one (DNS rebinding) would get through. Push it onto the handler
+     * stack so it sits below the redirect middleware. Requests through a proxy
+     * are left to the proxy, which does its own resolving.
+     *
+     * @return callable The middleware.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    public static function pinningMiddleware(): callable
+    {
+        return static fn(callable $handler): callable => static function(RequestInterface $request, array $options) use ($handler) {
+            if (!empty($options['proxy'])) {
+                return $handler($request, $options);
+            }
+
+            $uri = $request->getUri();
+            $scheme = strtolower($uri->getScheme());
+
+            try {
+                if (!in_array($scheme, self::ALLOWED_SCHEMES, true)) {
+                    throw new UnsafeUrlException('Only http and https URLs may be fetched.', UnsafeUrlException::REASON_SCHEME);
+                }
+
+                $ip = self::publicAddressFor($uri->getHost(), $scheme, $uri->getPort());
+            } catch (UnsafeUrlException $e) {
+                return Create::rejectionFor($e);
+            }
+
+            if ($ip !== null) {
+                $port = $uri->getPort() ?? ($scheme === 'https' ? 443 : 80);
+                $address = str_contains($ip, ':') ? "[$ip]" : $ip;
+                $options['curl'][CURLOPT_RESOLVE][] = $uri->getHost() . ":$port:$address";
+            }
+
+            return $handler($request, $options);
+        };
+    }
+
+    /**
+     * A handler stack with pinningMiddleware() in place, for a client that
+     * fetches URLs content editors control.
+     *
+     * @return HandlerStack The handler stack.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    public static function pinnedHandlerStack(): HandlerStack
+    {
+        $stack = HandlerStack::create();
+        $stack->push(self::pinningMiddleware(), 'link-audit-pin');
+
+        return $stack;
     }
 
     /**
@@ -141,7 +246,7 @@ class UrlSafety
             );
         }
 
-        self::assertHostIsPublic($parts['host']);
+        self::assertHostIsPublic($parts['host'], $scheme, isset($parts['port']) ? (int)$parts['port'] : null);
     }
 
     /**
@@ -223,7 +328,7 @@ class UrlSafety
             ): void {
                 // Throws UnsafeUrlException if the redirect target host
                 // resolves to a private/reserved address.
-                self::assertHostIsPublic($uri->getHost());
+                self::assertHostIsPublic($uri->getHost(), $uri->getScheme(), $uri->getPort());
             },
         ];
     }
@@ -231,23 +336,6 @@ class UrlSafety
     // =========================================================================
     // Private Methods
     // =========================================================================
-    /**
-     * Whether the host is one this install serves.
-     *
-     * Matched against the hostname of each configured site's base URL, exactly:
-     * a suffix match would let `evil-example.com` past a site on `example.com`,
-     * and a wildcard would hand an attacker every subdomain of it.
-     *
-     * @param string $host The hostname to test.
-     * @return bool Whether the host belongs to this installation.
-     * @author John Henry Donovan <info@johnhenry.ie>
-     * @since 1.0.0
-     */
-    private static function _isOwnSiteHost(string $host): bool
-    {
-        return IpRange::isOwnSiteHost($host);
-    }
-
     /**
      * Resolves a hostname to every IPv4 and IPv6 address it maps to.
      *

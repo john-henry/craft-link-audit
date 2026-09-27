@@ -14,6 +14,7 @@ use craft\elements\User;
 use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
 use DateTimeInterface;
+use johnhenry\linkaudit\enums\ScanMode;
 use johnhenry\linkaudit\enums\ScanStatus;
 use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\LinkAudit;
@@ -93,6 +94,16 @@ class ReportService extends Component
      * for the request. Kept by {@see self::_siteHosts()}.
      */
     private ?array $_siteHostsMemo = null;
+
+    /**
+     * @var int How many callers are holding count invalidation back.
+     */
+    private int $_countsHeld = 0;
+
+    /**
+     * @var bool Whether an invalidation was asked for while held.
+     */
+    private bool $_countsDirty = false;
 
     // =========================================================================
     // Public Methods
@@ -407,10 +418,10 @@ class ReportService extends Component
     /**
      * Throws away every stored verdict count.
      *
-     * Called by the writes that can move one. Cheap enough to call per URL: it
-     * is a single cache write against a request that has just been over the
-     * network, and the alternative is a navigation badge that goes on claiming
-     * eleven broken links after the scan that fixed them has finished.
+     * Called by the writes that can move one. While a batch holds invalidation
+     * back ({@see self::holdCountInvalidation()}), it is recorded and done once
+     * when the batch lets go, so the badges' cache isn't kept permanently cold
+     * during a scan.
      *
      * @return void
      * @author John Henry Donovan <info@johnhenry.ie>
@@ -418,7 +429,44 @@ class ReportService extends Component
      */
     public function invalidateCounts(): void
     {
+        if ($this->_countsHeld > 0) {
+            $this->_countsDirty = true;
+
+            return;
+        }
+
         TagDependency::invalidate(Craft::$app->getCache(), self::CACHE_TAG_COUNTS);
+    }
+
+    /**
+     * Holds count invalidation back until {@see self::releaseCountInvalidation()}.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    public function holdCountInvalidation(): void
+    {
+        $this->_countsHeld++;
+    }
+
+    /**
+     * Lets go of a hold, invalidating once if anything asked for it meanwhile.
+     *
+     * @param bool $all Whether to drop every hold, for when a job ended without
+     *                  releasing its own.
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    public function releaseCountInvalidation(bool $all = false): void
+    {
+        $this->_countsHeld = $all ? 0 : max(0, $this->_countsHeld - 1);
+
+        if ($this->_countsHeld === 0 && $this->_countsDirty) {
+            $this->_countsDirty = false;
+            $this->invalidateCounts();
+        }
     }
 
     /**
@@ -439,6 +487,9 @@ class ReportService extends Component
         $row = (new Query())
             ->from([ScanRecord::tableName()])
             ->where(['status' => [ScanStatus::Complete->value, ScanStatus::Cancelled->value]])
+            // One page reread from the edit screen, or the check that follows
+            // it, isn't a scan of the site.
+            ->andWhere(['mode' => [ScanMode::Full->value, ScanMode::Incremental->value]])
             ->orderBy(['dateFinished' => SORT_DESC, 'id' => SORT_DESC])
             ->one();
 
@@ -503,7 +554,8 @@ class ReportService extends Component
             // Craft is left to look it up. That costs a query per row, which is
             // what the row limit is for.
             $element = $elements->getElementById($ownerId, null, $siteId);
-            $canView = $element !== null && $user !== null && $element->canView($user);
+            // No user means a trusted caller, such as the console export.
+            $canView = $element !== null && ($user === null || $element->canView($user));
 
             // The field label has to come off the element the link actually
             // sits on: a layout can override a field's label, and the override
@@ -527,8 +579,31 @@ class ReportService extends Component
                 }
             }
 
+            // A page this user can't open is said to exist and nothing more: its
+            // title, block, field and link text all come from content they
+            // aren't allowed to read.
+            if ($element !== null && !$canView) {
+                $references[] = [
+                    'element' => null,
+                    'hidden' => true,
+                    'elementType' => $this->elementTypeLabel((string)$row['elementType']),
+                    'editUrl' => null,
+                    'fieldHandle' => null,
+                    'fieldName' => null,
+                    'blockType' => null,
+                    'linkText' => null,
+                    'nested' => false,
+                    'rawHref' => null,
+                    'site' => Craft::$app->getSites()->getSiteById($siteId),
+                    'source' => (string)$row['source'],
+                ];
+
+                continue;
+            }
+
             $references[] = [
                 'element' => $element,
+                'hidden' => false,
                 'elementType' => $this->elementTypeLabel((string)$row['elementType']),
                 'editUrl' => $canView ? $this->referenceEditUrl($element, $row, $fieldElement, precise: true) : null,
                 'fieldHandle' => $row['fieldHandle'] !== null ? (string)$row['fieldHandle'] : null,
@@ -564,6 +639,11 @@ class ReportService extends Component
                     ScanStatus::Checking->value,
                 ],
             ])
+            // Same staleness rule as the start guard, so a run whose worker
+            // died stops being polled.
+            ->andWhere(['>', 'dateUpdated', Db::prepareDateForDb(
+                DateTimeHelper::now()->modify('-' . ScanService::ABANDONED_AFTER_MINUTES . ' minutes'),
+            )])
             ->orderBy(['id' => SORT_DESC])
             ->one();
 
@@ -775,6 +855,16 @@ class ReportService extends Component
 
         $siteId = (int)$row['siteId'];
         $refElementId = (int)$row['elementId'];
+
+        // Only for someone who can open the page the link sits on.
+        $ownerId = $row['ownerElementId'] !== null ? (int)$row['ownerElementId'] : $refElementId;
+        $owner = Craft::$app->getElements()->getElementById($ownerId, null, $siteId);
+        $user = Craft::$app->getUser()->getIdentity();
+
+        if ($owner === null || $user === null || !$owner->canView($user)) {
+            return null;
+        }
+
         $nested = $row['ownerElementId'] !== null && (int)$row['ownerElementId'] !== $refElementId;
         $blockId = null;
         $fieldHandle = $row['fieldHandle'] !== null ? (string)$row['fieldHandle'] : null;
@@ -1074,13 +1164,17 @@ class ReportService extends Component
             ->all();
 
         $elements = Craft::$app->getElements();
+        $user = Craft::$app->getUser()->getIdentity();
         $pages = [];
 
         foreach ($rows as $row) {
             $elementId = (int)$row['elementId'];
+            $element = $elements->getElementById($elementId, null, $siteId);
+            $hidden = $element !== null && $user !== null && !$element->canView($user);
 
             $pages[] = [
-                'element' => $elements->getElementById($elementId, null, $siteId),
+                'element' => $hidden ? null : $element,
+                'hidden' => $hidden,
                 'elementId' => $elementId,
                 'total' => (int)$row['total'],
             ];

@@ -523,7 +523,9 @@
                             {% for page in topPages %}
                                 <tr>
                                     <td>
-                                        {% if page.element %}
+                                        {% if page.hidden ?? false %}
+                                            <span class="light">{{ 'A page you can’t view'|t('link-audit') }}</span>
+                                        {% elseif page.element %}
                                             {% set editUrl = page.element.getCpEditUrl() %}
                                             {% if editUrl %}
                                                 <a href="{{ editUrl }}">{{ page.element.uiLabel }}</a>

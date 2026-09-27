@@ -344,7 +344,7 @@ describe('UrlsController::actionDetail', function() {
         expect($message)->toContain('will not be reported again');
     });
 
-    it('hides the Edit link from somebody who may not view the element', function() {
+    it('names only that a page exists to somebody who may not view it', function() {
         $entry = detailEntry();
         $entry->setFieldValue('laBody', '<p><a href="https://example.com/fenced">Fenced</a></p>');
         Craft::$app->getElements()->saveElement($entry);
@@ -357,15 +357,17 @@ describe('UrlsController::actionDetail', function() {
             'accesscp',
             'accessplugin-link-audit',
             'editsite:' . Craft::$app->getSites()->getPrimarySite()->uid,
-            'link-audit:viewreports',
+            'link-audit:view-reports',
         ]);
         $this->actingAs($reader);
 
         $this->get(detailPath('https://example.com/fenced'))
             ->assertOk()
-            // The row is still listed: hiding it entirely would make the count
-            // lie. Only the link to a page they cannot open is withheld.
-            ->assertSee('Fenced')
+            // The row is still listed, so the count doesn't lie, but nothing
+            // from a page they can't open is shown: no title, link text or
+            // Edit link.
+            ->assertSee('A page you can’t view')
+            ->assertDontSee('>Fenced<')
             ->assertDontSee($entry->getCpEditUrl());
     });
 });

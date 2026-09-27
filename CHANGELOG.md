@@ -1,166 +1,147 @@
 # Release Notes for Link Audit
 
-## 1.0.0-beta.8 - 2026-09-22
+## 1.0.0-beta.8 - 2026-09-25
 
 ### Added
-- A Getting started pane on the Overview, shown until the first scan has run. A fresh install used to
-  open on a screen of zeros with nothing on it saying what to do about that. It now walks through the
-  three steps in order: run a full scan, leave it to the queue, then work from the top of the report. It
-  says plainly that the scan runs in the background, so there is no need to sit watching the page, and
-  where your account is not allowed to run scans it says so rather than leaving you wondering where the
-  button went.
-- A Using the Dashboard guide in the documentation, with a short video walkthrough, linked from that
-  pane.
-
-### Fixed
-- The example config file now shows the editable tables as well: ignore patterns, ignored hosts, the
-  bot-hostile host list, excluded URI patterns and the always-valid internal patterns. All five could
-  always be pinned in `config/link-audit.php`, and the control panel has always said so when they were,
-  but the file you copy to do it did not show them, and the row shape is not something anybody guesses.
-- The Broken Links widget can no longer take the dashboard down with it. Craft asks a widget to draw
-  itself without catching anything, so a template that would not render, after a part-finished deploy
-  say, stopped the whole dashboard loading for everybody who had the tile, including the page they would
-  have used to remove it. The tile now goes quiet on its own and the reason goes in the log.
-- `link-audit/scan/report` no longer takes a `--site` it was never going to use. The report covers the
-  whole install, but the option was listed all the same, so passing one did nothing and passing a
-  mistyped one did nothing quietly: the report came out looking right and the command said it worked.
-  It is refused now, the way an option nobody offers should be.
-- The address guard now reads an IPv4 address written inside an IPv6 one. There are three ways of doing
-  that, and the guard was judging the outside of the address rather than the machine it reaches, so on a
-  network carrying NAT64 or 6to4 a link could have been followed to somewhere on your own side of the
-  firewall. Multicast, broadcast and the documentation ranges are turned away now as well.
-- The recheck and retention windows are now capped as well as floored. They are turned into a length of
-  time to work out when a URL is next due, and a number big enough stops being one: the setting saved
-  fine and the next check threw instead of being scheduled. Ten years of days and a year of hours, which
-  is past anything anybody means by leaving something alone.
-- The page crawl step no longer restarts itself on a slow site. It fetches twenty pages one after another
-  and the queue holds a job for five minutes by default, which twenty pages at the default timeout
-  already goes past. When it did, the queue handed the job on and the same twenty pages were crawled
-  again from the top, over and over, while the scan sat still. The step now asks for as long as the
-  fetching can actually take.
-- The Connect Timeout setting now applies when pages are crawled. The crawler was asking for the response
-  a way that quietly has no connect timeout at all, so a host that accepts a connection and then says
-  nothing cost the full request timeout on every page instead of the few seconds you set. Nothing else
-  about the crawl changes: the same cap on how much of a page is read still applies.
-- The URL detail page now keeps its place in the sidebar. Opening a URL from any of the lists left every
-  entry in the Link Audit menu unlit, so there was nothing to tell you which list you had come out of.
-- The plugin's settings now fire Craft's `defineRules` event, so a module can add its own validation to
-  them. The settings model was declaring its rules in a way that skipped the event, so a handler you
-  attached to it ran against nothing and your rule was never applied.
-- Ignored URL Patterns, Ignored Hosts and Excluded URI Patterns now switch a newly added row on. The "On"
-  switch on a fresh row was starting off, so a pattern or host you typed in and saved came back looking
-  right and was then passed over by every scan, with nothing to tell you why. Rows you already had are
-  untouched.
-- The Excluded URI Patterns help said a blank pattern matched the homepage. A blank row was never saved,
-  so that was never a thing you could do from the settings screen. The homepage is `^$`, and the help now
-  says so.
-- Fixed the CSV export writing broken line endings when Craft runs on Windows. The file is written with
-  the CRLF endings a spreadsheet expects, but the handle it went through was rewriting them again on the
-  way out, so every row ended up with a stray carriage return. Nothing changes on Linux or macOS.
-- `link-audit/scan/element` says so when there is no element with that id, or when the one there is has
-  been excluded from the audit. It used to report "0 links stored" in green either way, which reads as a
-  page that was read and had nothing on it.
-- A pattern that is not a valid regular expression is refused when you save it, in all three settings
-  that take one: Ignored URL Patterns, Excluded URI Patterns and Always Valid Internal URLs. A pattern
-  that will not compile never matches, so until now the row saved without complaint and then quietly did
-  nothing: an ignore that ignored nothing went on reporting the links it was written to quiet, and an
-  exclusion that excluded nothing went on scanning the pages it was written to leave alone. A row you
-  have switched off is left alone, so a half-written rule can still be parked.
-- The count beside Ignored is brought up to date when the sweep that removes URLs nothing points at
-  removes one that was ignored. Running the prune left the badge showing the old number for up to a
-  minute, which read as the command having done nothing.
-- A check run now tells the queue how long it may actually need, rather than letting it assume five
-  minutes. On a slower setting, a run of a hundred links could take far longer than that, and a job that
-  outlives its time to run is handed to the next worker from the start: every one of those links asked
-  again, and again, with the run never finishing. Raising the timeout or lowering how many run at once
-  no longer has that effect.
-- Two checks landing on the same link at the same time no longer lose each other's count of consecutive
-  failures. A scheduled scan, a rendered crawl and the Check again button all write the same row, and
-  each worked its count out from what it read before the other wrote, which could hold a link one check
-  short of being called broken. The write now only lands if the row still holds what was read, and reads
-  again if it does not.
-- Saving or restoring a page can no longer be refused because the plugin could not queue its reread. The
-  hook runs inside the save itself, so anything that went wrong there came back to the author as a
-  failed save of their own content. A reread that was not queued is picked up by the next scan. Deleting
-  a page already worked this way.
+- A Getting started pane on the Overview, shown until the first scan has run.
+- A Using the Dashboard guide in the docs, with a short video.
+- An Excluded Fields setting on the Scanning tab, for fields holding links nobody is going to fix, like a legacy body kept after a migration. You can search the list by field name or handle.
+- Links in Commerce variants are now read along with their product.
+- Support for Navigation 4, as well as Navigation 3.
 
 ### Changed
-- The check that stops a scan fetching a private or internal address, and the name lookup behind it,
-  now come out of a small shared package, `johnhenry/craft-ip-guard`, which Accessibility Audit reads
-  from as well. What counts as private has not changed, nor has what happens when a name will not
-  resolve. They sit on their own so a range added to the list is added for both plugins at once, a gap
-  in only one of them being the whole risk. Composer pulls it in on update.
+- The private-address check now comes from the shared `johnhenry/craft-ip-guard` package.
+- Permission handles are now kebab-case: `link-audit:view-reports`, `link-audit:run-scans` and `link-audit:manage-ignores`. A migration carries over existing grants; update any code that checks the old handles.
+- Excluded URI Patterns now store the site by UID, so a row means the same site in every environment. A migration converts existing rows; in `config/link-audit.php`, use `siteUid` instead of `siteId`.
+- Relative links in content now resolve against the page they sit on, the way a browser reads them.
+- Links to scheduled or expired entries are now checked over HTTP rather than taken as working.
+- A HEAD request answered with 404 or 410 is now confirmed with a GET before the link is called broken.
+- A 401 or 407 answer now shows as Unverifiable rather than Broken.
+- Check this page again now only checks that page's links, and sends no notifications.
+- A host with a long gap between requests now gets as many checks as fit in a run, rather than none.
+- The check step stops starting requests after a set time and saves each result as it lands, so one slow host can't stall a scan.
+- The Overview's last scan pane no longer shows single-page rechecks.
+- Old scan history and unused host data are now pruned during Craft's garbage collection too.
+- Check again and Restore no longer retry inside the web request.
+
+### Fixed
+- The example config file now shows the five editable tables.
+- A Broken Links widget that can't render no longer takes the whole dashboard down.
+- `link-audit/scan/report` no longer accepts a `--site` option it ignored.
+- IPv4 addresses written inside IPv6 ones (mapped, NAT64, 6to4) are now caught by the address guard, along with multicast, broadcast and documentation ranges.
+- The recheck and retention windows are now capped, so a huge value can't break scheduling.
+- The page crawl step no longer restarts itself on a slow site.
+- The Connect Timeout setting now applies to the rendered crawl.
+- The URL detail page now highlights the list it was opened from in the sidebar.
+- The settings now fire Craft's `defineRules` event, so modules can add validation.
+- New rows in Ignored URL Patterns, Ignored Hosts and Excluded URI Patterns are switched on by default.
+- The Excluded URI Patterns help now gives `^$` for the homepage.
+- Fixed stray carriage returns in CSV exports on Windows.
+- `link-audit/scan/element` now says when the element doesn't exist or is excluded.
+- Invalid regular expressions are now rejected when saving pattern settings.
+- The Ignored badge now updates when the orphan prune removes an ignored URL.
+- Two checks landing on the same link at once no longer lose a failure count.
+- A failure to queue a reread can no longer fail a save or restore.
+- A link removed from a Matrix block, nested entry or navigation node now leaves the report when the page is read again.
+- Links saved while a full scan was running are no longer removed when that scan finishes.
+- Links ignored because of a setting, such as Check Internal Links being off, come back once the setting changes.
+- Saving a settings tab no longer copies values from `config/link-audit.php` into project config.
+- A scan that fails is now marked as failed, and the Overview stops waiting on it.
+- Stop now cancels every running scan, including one whose worker died.
+- Deleting or disabling entries during a full scan no longer makes it skip others.
+- Incremental scans no longer miss edits on a site left out of the last single-site scan.
+- Links to a page that's deleted, or whose URI changes, are now rechecked on the next run.
+- Anchor IDs made of digits, like `id="2024"`, are no longer reported missing.
+- The rendered crawl now skips excluded sections and category groups.
+- Disabling an entry now takes its links off the report straight away.
+- The links panel now shows while an entry is being edited.
+- The broken and permanent redirect counts on the Broken Links widget now announce their label along with the number.
+- Clicking a broken link in the sidebar panel now moves focus to it on the page and announces what was found, or that it couldn't be found.
+
+### Security
+- Navigation node URLs are no longer expanded from environment variables, which let a navigation editor send server secrets to an outside address.
+- Fixed a stored XSS through the Host column on the list screens.
+- Checks now connect to the exact address that passed the private-network check, on every redirect too, closing a DNS rebinding gap.
+- The own-site exemption now needs the site's exact scheme, host and port, and is off when `@web` is taken from the request.
+- A huge `Retry-After` header can no longer stop the check step.
+- Response bodies are capped and every request has a total time limit, so a slow or oversized answer can't hold a worker or fill the disk.
+- Report screens, the CSV export and the links panel no longer show the title, link text or field of a page the reader can't view.
+- Usernames and passwords are now stripped from links with schemes the plugin doesn't check.
+- Slack notifications no longer follow redirects.
 
 ## 1.0.0-beta.7 - 2026-08-26
 
-### Security
-- Closed a stored cross-site-scripting hole on the report list screens. An address carrying a double quote, which a browser accepts and an author can paste into a link, was placed into a control-panel attribute through an escaper that does not escape quotes, so a crafted href could run script for anyone opening the list. Attribute values are now escaped in full.
-
 ### Added
-- Edit links on the URL detail page now land on the very anchor carrying the link, the same precision the entry sidebar panel has: the right tab is opened, the exact link is scrolled to the centre of the screen and flashed, inside a Matrix block or a long rich text field alike. The CSV keeps the plainer field and block fragments, which work for a reader who is not signed in.
-- Two new console commands for catching the report up without waiting on recheck windows: `php craft link-audit/scan/recheck-url --url=...` checks one address there and then and prints the verdict, and `php craft link-audit/scan/recheck-broken --all` brings everything but the ignored forward, working links included, the sweep for after a migration or a hosting move.
-
-### Removed
-- The guided tour is gone, and the vendored Driver.js library with it. The Where to start pane on the Overview does the same orientation job in context and stays put rather than running once, so the tour had become a maintenance cost with nothing left to teach that the screen does not.
+- Edit links on the URL detail page now open the right tab and scroll to the exact link.
+- `link-audit/scan/recheck-url` checks one address straight away, and `link-audit/scan/recheck-broken --all` brings every link forward for a check.
 
 ### Changed
-- A CSV export leaves off the two redirect columns, Redirect Code and Goes To, on any list but Redirects, where they are always empty, so a broken or unverifiable export no longer carries two blank columns to puzzle over. The download is also named after the verdict as the screen labels it: the Unverifiable list exports as `link-audit-unverifiable-<date>.csv` rather than the `blocked` the database calls it.
-- The longer settings explanations moved off the screen and into info tips: each field now leads with one plain sentence, and the rest sits behind the familiar circled i, the way Craft's own settings do it, with nothing cut, only tucked away. The pattern and host columns in the rules tables carry a tip of their own with worked examples, so the regular expression help is beside the box you type it into.
-- The Settings link leaves the sidebar on environments where admin changes are turned off, the same rule Craft applies to its own Settings section. The screens stay reachable by URL there, rendered read-only.
-- The list screens behave themselves on a phone: the filter dropdowns sit two to a row with Apply and Download CSV full width beneath them, the Host and Last Checked columns step aside so the address and the buttons keep their room, and the Where it appears table on a URL's page scrolls sideways rather than crushing its columns. On a full screen, Apply now looks like the button it is and Download CSV sits at the end of the bar on its own.
-- The host filter on the list screens now says how many URLs each host is carrying, `example.com (3)`, so a reader can see where the trouble concentrates before choosing.
-- The settings tabs no longer open with a boxed note explaining themselves. The guidance lives in each field's own instructions and in the documentation, and a screen that greets you with a warning-styled paragraph reads like something is wrong when nothing is. The Schedule tab keeps its note, since that one carries the cron lines to copy, and it is now styled as the blue tip it is rather than a red warning.
+- CSV exports leave out the redirect columns except on the Redirects list, and are named after the list.
+- Longer settings help moved into info tips.
+- The Settings link is hidden where admin changes are turned off.
+- The list screens now work on a phone.
+- The host filter shows how many URLs each host has.
+- The settings tabs no longer open with a warning-styled note.
+
+### Removed
+- The guided tour, and the bundled Driver.js library.
 
 ### Fixed
-- The broken-links notification email now names an element link by its target's title instead of the internal marker, and gives each link its own line through to its report page, where the pages carrying it are listed with the edit links that open on the right field.
-- The "Check this page again" button, and a rescan, no longer send a notification email or Slack post for links that were already broken. A recheck that finds a standing failure still standing is no longer counted as a fresh break, and a single-page recheck no longer mails the content team at all.
-- A very long link address no longer breaks a scan. An href over the stored length is trimmed to fit rather than failing the whole batch and failing it again on every rescan.
-- The page recheck endpoint now checks that the element exists and that the reader may see it before doing any work, and the report list screens cap how large a page of rows a request may ask for.
-- The Ignored screen names an element link by its target's title, the way every other screen does, instead of the internal marker.
-- Hovering a URL on the list screens now says plainly that the click opens the link's report rather than the link itself. The external-link icon beside it remains the way to actually visit one.
-- The sidebar badges no longer vanish on screens with no site context, the Dashboard among them: they fall back to the primary site, which is the site the links themselves open.
-- The badge beside Ignored in the sidebar now counts the dismissals the screen actually lists. It used to count every URL holding the ignored verdict, rule-quieted addresses and skipped schemes included, so it could promise dozens of rows over an empty screen.
-- Clearing a number field on the settings and saving no longer quietly stores a zero. For the fields where zero is legal, the caching windows among them, an emptied box used to become "trust nothing, recheck everything on every scan" without anybody choosing it. An empty box now keeps the stored value, and a typed 0 still lands.
+- Broken-link emails now name element links by title and link each one to its report page.
+- Check this page again and rescans no longer send notifications for links that were already broken.
+- A very long link no longer fails a scan.
+- The page recheck endpoint now checks the element exists and the reader may view it, and list screens cap the page size.
+- The Ignored screen names element links by title.
+- Hovering a URL on the list screens now says the click opens its report.
+- The sidebar badges no longer vanish on screens with no site context.
+- The Ignored badge now counts only what the Ignored screen lists.
+- Clearing a number setting no longer saves a zero.
+
+### Security
+- Fixed a stored XSS through double quotes in link addresses on the list screens.
 
 ## 1.0.0-beta.6 - 2026-08-25
 
 ### Added
-- A Where to start pane on the Overview, shown while anything is broken. On a site with thousands of broken links a wall of counts answers how bad it is and nothing else, so the pane offers a working order: the broken links pointing at your own sites first, since those are yours to fix without waiting on anybody, then the handful of addresses sitting in the most places, where one fix clears hundreds of rows at once, then the fresh arrivals: what was still working a week ago and what the last scan saw for the first time, since fresh breakage is worth catching before it settles into the pile. It finishes with what not to bother with at all.
-- A Points At filter on the list screens, splitting links to your own sites from links to other websites. The CSV download honours it like the other filters.
-- An Excluded Sections setting on the Scanning tab, for sections whose entries are data a template reads rather than pages anybody visits. An excluded section is fenced both ways: its entries are never read for links, and a link or relation pointing at one of its entries is recorded as ignored instead of being reported broken for having no page. This is the answer for URL-less sections, which the Excluded URI Patterns setting cannot reach since their entries have no URI to match. An Excluded Category Groups setting does the same for taxonomy, where having no pages is the norm rather than the exception.
-- The CSV export now carries an Edit URL column, a link straight into each page's edit screen in the control panel, and a Page URL column with the page's public address. A page title in a spreadsheet was only half an answer: the person handed the file can now click through and fix the link rather than go searching by title.
+- A Where to start pane on the Overview, shown while anything is broken.
+- A Points At filter on the list screens, for own-site or external links.
+- Excluded Sections and Excluded Category Groups settings.
+- Edit URL and Page URL columns in the CSV export.
 
 ### Changed
-- Element links whose target has no URL of its own now show the target's title on the list screens, the URL detail page, the entry sidebar panel and the Where to start pane, instead of an internal `element:<id>` marker that names nothing an editor recognises. The detail page says plainly that such a link has no address to open or copy.
-- Edit links on the URL detail page, and the Edit URL column in the CSV, now land where the work is: a link in a top-level field scrolls the edit screen to that field, and a link inside a Matrix block scrolls to the block itself and gives it a flash of outline so it is easy to spot. A field or block sitting on another tab has its tab opened first, and when a block cannot be found on the page at all, being edited through a draft for instance, the Matrix field holding it is scrolled to instead.
-- The links panel on an entry's edit screen earned its keep: the broken addresses in it now scroll to the very anchor carrying the link, right there in the field, rather than leaving the page, with the report page one click away on the code badge, and a new Check this page again button rereads the page and queues a fresh check of everything it links to, so a fix shows up while the editor is still looking at it. The panel now sits at the top of the sidebar additions, above the informational panels, since it is the one with work in it.
-- A link found inside a Matrix block now says which kind of block it is in: the Where it appears table reads "(in a Stats and Image block)" rather than "(in a block)", using the name on the block's own header, so the author knows which block on the page to open.
-- The CSV columns now lead with the place and follow with the link: Page, Edit URL, Page URL, Page Type, Site, Field, Link Text, then the URL and its verdict, codes and dates. A row in this file is a place a link appears, so the file now reads as the work list it is. Anything parsing the old column order will need updating.
-- The Redirects screen's opening line now says plainly what the two address columns mean: URL is the address as written in your content, Goes To is where the server actually sends anybody who follows it.
-- On an environment where admin changes are turned off, the settings screens now show Craft's own read-only notice, the same one every native settings screen and well-behaved plugin shows, instead of a warning box of the plugin's own. The plugin now requires Craft 5.6 or later, which is where that notice arrived.
+- Craft 5.6 or later is now required.
+- Links to elements with no URL now show the target's title.
+- Edit links now scroll to the field or Matrix block holding the link.
+- The entry links panel scrolls to the link in the field, and has a Check this page again button.
+- Links in Matrix blocks now name the block type.
+- CSV columns now lead with the page and follow with the link. Update anything that parses the old column order.
+- The Redirects screen explains its two address columns.
+- Read-only settings screens now show Craft's own notice.
 
 ## 1.0.0-beta.5 - 2026-08-24
 
+### Changed
+- The Stop button is now a plain button.
+
 ### Fixed
-- Element links (Link fields, Hyper links, entry reference tags) pointing at a disabled entry that still has a URL are now verified over HTTP instead of being reported broken from the element lookup alone. The rendered href is the target's URL whether the entry is enabled or not, so a redirect covering a retired page now reports as the redirect it is, with its destination. This closes the element-link half of the beta.4 fix: a disabled target with no URL, and a disabled relation target, still report broken from the lookup, since no request could answer for those.
-- The Overview no longer claims nothing has been scanned when a run is stopped before any scan has completed. A stopped run now counts as the last scan: its pane says it was stopped early and its counts cover what it got through.
-- The Stop button on the running scan pane is now a plain button on an opaque base, with a bit more room above it. The red caution styling fought the pane's blue tint and oversold the action: stopping a scan loses nothing, everything already checked stays on the report.
+- Element links to a disabled entry that still has a URL are now checked over HTTP.
+- The Overview no longer says nothing was scanned when the first scan was stopped.
 
 ## 1.0.0-beta.4 - 2026-08-24
 
 ### Fixed
-- Internal URLs held by a disabled element are now verified over HTTP like any other address the database cannot vouch for, instead of being reported broken from the disabled match alone. A redirect covering a retired page, the usual housekeeping when an entry is disabled and a Retour rule takes over its address, now reports as the redirect it is, with its destination.
+- Internal URLs held by a disabled element are now checked over HTTP, so a redirect over a retired page shows as a redirect.
 
 ## 1.0.0-beta.3 - 2026-08-24
 
 ### Added
-- Running scans can now be cancelled, from the Stop button on the Overview or with `php craft link-audit/scan/cancel`. Cancelling releases the run's remaining queue jobs, marks the scan `cancelled`, and frees the one-scan-at-a-time lock immediately, so a new scan can start straight away. Verdicts already recorded are kept; content the run never reached is picked up by the next scan.
-- New `php craft link-audit/scan/reset` console command for a clean rebuild, for instance after changing which element types or sources get scanned. It cancels any running scan, then clears all stored URLs, references, scan history and per-host throttle state. Ignore decisions survive: a dismissed URL is recreated as ignored the moment a scan rediscovers it. Prompts for confirmation; pass `--force` to skip the prompt in scripts.
+- Running scans can be stopped from the Overview or with `link-audit/scan/cancel`.
+- `link-audit/scan/reset` clears all stored results for a clean rebuild, keeping ignore decisions.
 
 ## 1.0.0-beta.2 - 2026-08-24
 
 ### Fixed
-- Internal URLs that match no element and no route are now verified over HTTP instead of being marked broken from the database alone. Request-time redirects, whether from Retour, an `.htaccess` rewrite or a CDN rule, now report as redirects with their status code and final destination, and an internal URL that really is gone reports the response code the server itself returned. Own-host requests go through the same per-host throttling as everything else.
+- Internal URLs that match no element or route are now checked over HTTP, so redirects from Retour, rewrites or a CDN show up properly.
 
 ## 1.0.0-beta.1 - 2026-08-17
 

@@ -23,8 +23,9 @@ use yii\base\Component;
  *  - No more than `maxConcurrentPerHost` of them belong to any one domain;
  *  - Two requests to the same domain are at least `minHostDelayMs` apart, or
  *    further apart if that domain has asked for it; and
- *  - A domain already inside a backoff window is not touched at all, and its
- *    URLs come back deferred for a later pass.
+ *  - A domain already inside a backoff window, or one that earns a window
+ *    part way through the run, is not touched again, and its URLs come back
+ *    deferred for a later pass.
  *
  * Hosts are dispatched round-robin, so a site with four hundred links in the
  * batch cannot hold up the twenty other sites behind it.
@@ -37,9 +38,9 @@ use yii\base\Component;
  * purpose.
  *
  * All that waiting is capped, in two places, by {@see self::$maxYieldSeconds}. A
- * host whose gap means this batch could never get through its share is left out
- * before a request is made, and a run that spends the budget hands whatever is
- * still waiting back deferred. Neither is a verdict: the URLs keep what they
+ * host with a long gap gets only as many requests as fit in the budget, and a
+ * run that spends the budget hands whatever is still waiting back deferred. The
+ * run as a whole stops starting requests after {@see self::$maxRunSeconds}. None of these is a verdict: the URLs keep what they
  * knew and come round again on a later pass, which is a great deal better than a
  * job that runs past its time to run, gets released, and makes every one of
  * those requests a second time.
@@ -74,6 +75,11 @@ class RequestScheduler extends Component
      */
     private const _YIELD_MICROSECONDS = 20000;
 
+    /**
+     * @var float The longest one run keeps starting new requests for.
+     */
+    private const _MAX_RUN_SECONDS = 90.0;
+
     // =========================================================================
     // Public Properties
     // =========================================================================
@@ -94,6 +100,17 @@ class RequestScheduler extends Component
      * time to run.
      */
     public float $maxYieldSeconds = self::_MAX_YIELD_SECONDS;
+
+    /**
+     * @var float How long a run keeps starting new requests, in seconds. Once
+     * it passes, nothing new goes out: requests already in flight finish, and
+     * everything still waiting comes back deferred for a later pass.
+     *
+     * Retries, the per-host limit, a HEAD followed by a GET and a timeout per
+     * redirect hop all make a chunk's real cost hard to predict, so the run is
+     * bounded by the clock rather than by an estimate.
+     */
+    public float $maxRunSeconds = self::_MAX_RUN_SECONDS;
 
     // =========================================================================
     // Private Properties
@@ -133,11 +150,18 @@ class RequestScheduler extends Component
      * next pass.
      *
      * @param string[] $urls The absolute, normalised URLs to check.
+     * @param callable|null $onVerdict Called with each URL and its verdict as
+     *                                 soon as a request settles it, so a run cut
+     *                                 short still keeps what it learned.
+     *                                 Deferrals decided without a request are
+     *                                 only in the return value.
+     * @param int|null $retryCount How many times to retry a wobbly answer, or
+     *                             null for the setting.
      * @return array<string, Verdict> The verdicts, keyed by URL.
      * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
-    public function run(array $urls): array
+    public function run(array $urls, ?callable $onVerdict = null, ?int $retryCount = null): array
     {
         $settings = LinkAudit::$plugin->getSettings();
         $hostState = LinkAudit::$plugin->getHostState();
@@ -145,7 +169,7 @@ class RequestScheduler extends Component
 
         $concurrency = max(1, $settings->concurrency);
         $perHost = max(1, $settings->maxConcurrentPerHost);
-        $retryCount = max(0, $settings->retryCount);
+        $retryCount = max(0, $retryCount ?? $settings->retryCount);
 
         $verdicts = [];
         $queues = [];
@@ -155,24 +179,33 @@ class RequestScheduler extends Component
         }
 
         $budget = max(0.0, $this->maxYieldSeconds);
+        $deadline = microtime(true) + max(0.0, $this->maxRunSeconds);
 
-        // A host still serving out a backoff window is not asked anything, and
-        // neither is one whose gap means this batch could never get through its
-        // share inside the waiting budget. Both come back deferred before a
-        // single request goes out: half finishing a host slowly is worse than
-        // leaving it for the next pass, since the rest of the chunk waits on it.
+        // A host still serving out a backoff window is not asked anything. One
+        // whose gap is long gets as many of its URLs as fit in the waiting
+        // budget, and the rest come back deferred before a request goes out.
         foreach ($queues as $host => $waiting) {
-            $skipFor = $this->_skipSeconds($hostState, (string)$host, count($waiting), $budget);
+            $host = (string)$host;
 
-            if ($skipFor === null) {
+            if ($hostState->isBlocked($host)) {
+                $this->_deferHost($queues, $verdicts, $host, $this->_blockedSeconds($hostState, $host));
+
                 continue;
             }
 
-            foreach ($waiting as $task) {
-                $verdicts[(string)$task['url']] = $this->_deferred(Verdict::REASON_HOST_BACKOFF, $skipFor);
+            $fit = $this->_fitCount($hostState->minDelayMs($host), $budget);
+
+            if ($fit >= count($waiting)) {
+                continue;
             }
 
-            unset($queues[$host]);
+            $wait = (int)ceil($hostState->minDelayMs($host) * $fit / 1000);
+
+            foreach (array_slice($waiting, $fit) as $task) {
+                $verdicts[(string)$task['url']] = $this->_deferred(Verdict::REASON_HOST_BACKOFF, max(1, $wait));
+            }
+
+            $queues[$host] = array_slice($waiting, 0, $fit);
         }
 
         $inFlight = [];
@@ -182,6 +215,10 @@ class RequestScheduler extends Component
         $yielded = 0.0;
 
         while ($queues !== [] || $inFlight !== []) {
+            if ($queues !== [] && microtime(true) >= $deadline) {
+                $this->_deferWaiting($queues, $verdicts, $hostNextAllowedAt);
+            }
+
             do {
                 $dispatched = false;
 
@@ -228,9 +265,11 @@ class RequestScheduler extends Component
                             &$inFlight,
                             &$hostInFlight,
                             $attempt,
+                            $deadline,
                             $host,
                             $hostState,
                             $id,
+                            $onVerdict,
                             $retryCount,
                             $task,
                         ): Verdict {
@@ -245,18 +284,20 @@ class RequestScheduler extends Component
                                 $hostState->recordRateLimit($host, $verdict->retryAfterSeconds);
                                 $verdicts[$url] = $verdict->withAttempts($attempt);
 
-                                foreach ($queues[$host] ?? [] as $waiting) {
-                                    $verdicts[(string)$waiting['url']] = $this->_deferred(
-                                        Verdict::REASON_HOST_BACKOFF,
-                                    );
+                                if ($onVerdict !== null) {
+                                    $onVerdict($url, $verdicts[$url]);
                                 }
 
-                                unset($queues[$host]);
+                                $this->_deferHost($queues, $verdicts, $host, $verdict->retryAfterSeconds);
 
                                 return $verdict;
                             }
 
-                            if ($attempt <= $retryCount && $this->_isRetryable($verdict)) {
+                            if (
+                                $attempt <= $retryCount
+                                && $this->_isRetryable($verdict)
+                                && microtime(true) < $deadline
+                            ) {
                                 $queues[$host][] = [
                                     'url' => $url,
                                     'attempt' => $attempt,
@@ -268,6 +309,21 @@ class RequestScheduler extends Component
 
                             $verdicts[$url] = $verdict->withAttempts($attempt);
                             $this->_recordOutcome($hostState, $host, $verdict);
+
+                            if ($onVerdict !== null) {
+                                $onVerdict($url, $verdicts[$url]);
+                            }
+
+                            // A host that has just earned a backoff window gets
+                            // nothing more from this run.
+                            if (isset($queues[$host]) && $hostState->isBlocked($host)) {
+                                $this->_deferHost(
+                                    $queues,
+                                    $verdicts,
+                                    $host,
+                                    $this->_blockedSeconds($hostState, $host),
+                                );
+                            }
 
                             return $verdict;
                         });
@@ -495,36 +551,60 @@ class RequestScheduler extends Component
     }
 
     /**
-     * How long a host has to be left alone before this batch could get anywhere
-     * with it, or null when it is worth starting.
-     *
-     * Two ways a host is passed over before a single request goes out. It may
-     * already be inside a backoff window it earned earlier, which is the whole
-     * point of the window. Or its gap may be long enough that working through
-     * what this batch holds for it would spend the entire waiting budget: that
-     * one is the harder lesson, since the batch would otherwise start work it
-     * cannot finish and every other URL in the chunk waits on it.
+     * How long a host still has to serve of its backoff window.
      *
      * @param HostState $hostState The host state service.
      * @param string $host The host.
-     * @param int $pending How many of this batch's URLs belong to it.
-     * @param float $budget The run's waiting budget, in seconds.
-     * @return int|null Roughly how long to leave it, or null to go ahead.
+     * @return int The seconds, at least one.
      * @author John Henry Donovan <info@johnhenry.ie>
-     * @since 1.0.0
+     * @since 1.0.0-beta.8
      */
-    private function _skipSeconds(HostState $hostState, string $host, int $pending, float $budget): ?int
+    private function _blockedSeconds(HostState $hostState, string $host): int
     {
-        if ($hostState->isBlocked($host)) {
-            $until = $hostState->blockedUntil($host);
+        $until = $hostState->blockedUntil($host);
 
-            return max(1, ($until?->getTimestamp() ?? time()) - time());
+        return max(1, ($until?->getTimestamp() ?? time()) - time());
+    }
+
+    /**
+     * Hands back everything still queued for one host as a deferral.
+     *
+     * @param array<string, array<int, array<string, mixed>>> $queues The waiting
+     *                                                                tasks, per
+     *                                                                host.
+     * @param array<string, Verdict> $verdicts The verdicts so far, added to.
+     * @param string $host The host.
+     * @param int|null $retryAfterSeconds Roughly how long to leave it.
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    private function _deferHost(array &$queues, array &$verdicts, string $host, ?int $retryAfterSeconds): void
+    {
+        foreach ($queues[$host] ?? [] as $task) {
+            $verdicts[(string)$task['url']] = $this->_deferred(Verdict::REASON_HOST_BACKOFF, $retryAfterSeconds);
         }
 
-        // The first request to a host is free; every one after it waits out the
-        // gap.
-        $span = $hostState->minDelayMs($host) * max(0, $pending - 1) / 1000;
+        unset($queues[$host]);
+    }
 
-        return $span > $budget ? (int)ceil($span) : null;
+    /**
+     * How many requests to one host fit in the waiting budget.
+     *
+     * The first request is free; every one after it waits out the gap.
+     *
+     * @param int $gapMs The host's gap between requests, in milliseconds.
+     * @param float $budget The run's waiting budget, in seconds.
+     * @return int How many to send.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    private function _fitCount(int $gapMs, float $budget): int
+    {
+        if ($gapMs <= 0) {
+            return PHP_INT_MAX;
+        }
+
+        return 1 + (int)floor($budget * 1000 / $gapMs);
     }
 }

@@ -10,9 +10,12 @@ use Craft;
 use craft\base\Element;
 use craft\db\Query;
 use craft\db\Table;
+use craft\elements\Entry;
+use craft\helpers\Db;
 use craft\models\Site;
 use craft\services\ProjectConfig;
 use craft\web\UrlRule;
+use DateTime;
 use johnhenry\linkaudit\enums\LinkKind;
 use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\helpers\UrlNormaliser;
@@ -79,6 +82,13 @@ class InternalResolver extends Component
      */
     private array $_routePatterns = [];
 
+    /**
+     * @var array<string, Verdict|null> Internal URL verdicts already worked out
+     * in this job, keyed by site and URL. The same footer link turns up on every
+     * page, and each lookup costs queries.
+     */
+    private array $_urlMemo = [];
+
     // =========================================================================
     // Public Methods
     // =========================================================================
@@ -110,7 +120,7 @@ class InternalResolver extends Component
         return match ($link->kind) {
             LinkKind::External => null,
             LinkKind::Ignored => new Verdict(status: UrlStatus::Ignored),
-            LinkKind::Internal => $this->resolveUrl($link->url, $link->siteId),
+            LinkKind::Internal => $this->_resolveUrlMemoised($link->url, $link->siteId),
             LinkKind::Element => $this->resolveElement(
                 $link->targetElementId ?? 0,
                 $link->targetElementType,
@@ -165,7 +175,7 @@ class InternalResolver extends Component
         bool $isRelation = false,
     ): ?Verdict {
         if (!$this->_settings()->checkInternalLinks) {
-            return new Verdict(status: UrlStatus::Ignored);
+            return new Verdict(status: UrlStatus::Ignored, reason: Verdict::REASON_SETTING);
         }
 
         if ($elementId <= 0) {
@@ -186,7 +196,12 @@ class InternalResolver extends Component
             return new Verdict(status: UrlStatus::Ignored, reason: Verdict::REASON_IGNORE_RULE);
         }
 
-        if (!$element->enabled || $element->getEnabledForSite($siteId) === false) {
+        // An entry that isn't live yet, or has expired, is served to nobody
+        // but a signed-in author, so it counts as switched off.
+        $notLive = $element instanceof Entry
+            && in_array($element->getStatus(), [Entry::STATUS_PENDING, Entry::STATUS_EXPIRED], true);
+
+        if ($notLive || !$element->enabled || $element->getEnabledForSite($siteId) === false) {
             // A disabled target that still carries a URL settles nothing for an
             // authored link: the template renders that address either way, and
             // a redirect put over a retired page answers it. The server gets
@@ -197,7 +212,9 @@ class InternalResolver extends Component
                 return null;
             }
 
-            return $this->_broken('What this points at is disabled on this site, so nobody can see it.');
+            return $this->_broken($notLive
+                ? 'What this points at is not live (scheduled for later, or expired), so nobody can see it.'
+                : 'What this points at is disabled on this site, so nobody can see it.');
         }
 
         if (!$isRelation && $element->getUrl() === null) {
@@ -226,7 +243,7 @@ class InternalResolver extends Component
     public function resolveUrl(string $url, int $siteId): ?Verdict
     {
         if (!$this->_settings()->checkInternalLinks) {
-            return new Verdict(status: UrlStatus::Ignored);
+            return new Verdict(status: UrlStatus::Ignored, reason: Verdict::REASON_SETTING);
         }
 
         $site = $this->_siteForUrl($url, $siteId);
@@ -246,7 +263,7 @@ class InternalResolver extends Component
         }
 
         if ($this->_matchesAllowPattern($uri)) {
-            return new Verdict(status: UrlStatus::Ignored);
+            return new Verdict(status: UrlStatus::Ignored, reason: Verdict::REASON_SETTING);
         }
 
         // No live element and no route answers to this address, but that is
@@ -259,9 +276,42 @@ class InternalResolver extends Component
         return null;
     }
 
+    /**
+     * Forgets the internal URL verdicts remembered so far. Called between queue
+     * jobs, so content edited in the meantime is looked up afresh.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    public function clearMemo(): void
+    {
+        $this->_urlMemo = [];
+    }
+
     // =========================================================================
     // Private Methods
     // =========================================================================
+
+    /**
+     * {@see self::resolveUrl()}, remembered for the rest of the job.
+     *
+     * @param string $url The normalised URL.
+     * @param int $siteId The site the link was found on.
+     * @return Verdict|null The verdict.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    private function _resolveUrlMemoised(string $url, int $siteId): ?Verdict
+    {
+        $key = $siteId . '|' . $url;
+
+        if (!array_key_exists($key, $this->_urlMemo)) {
+            $this->_urlMemo[$key] = $this->resolveUrl($url, $siteId);
+        }
+
+        return $this->_urlMemo[$key];
+    }
 
     /**
      * A broken verdict, with the reason every internal failure shares.
@@ -294,10 +344,23 @@ class InternalResolver extends Component
      */
     private function _elementExists(string $uri, int $siteId): bool
     {
+        $now = Db::prepareDateForDb(new DateTime());
+
         return (new Query())
             ->from(['elements_sites' => Table::ELEMENTS_SITES])
             ->innerJoin(['elements' => Table::ELEMENTS], '[[elements.id]] = [[elements_sites.elementId]]')
-            ->where([
+            ->leftJoin(['entries' => Table::ENTRIES], '[[entries.id]] = [[elements.id]]')
+            // An entry only answers while it's live: posted, and not yet expired.
+            ->andWhere([
+                'or',
+                ['entries.id' => null],
+                [
+                    'and',
+                    ['<=', 'entries.postDate', $now],
+                    ['or', ['entries.expiryDate' => null], ['>', 'entries.expiryDate', $now]],
+                ],
+            ])
+            ->andWhere([
                 'elements_sites.siteId' => $siteId,
                 'elements_sites.uri' => $uri,
                 'elements_sites.enabled' => true,

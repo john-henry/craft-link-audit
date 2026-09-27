@@ -69,6 +69,7 @@ uses()->beforeEach(function() {
 // test process; refreshing before each test recomputes against its identity.
 uses()->beforeEach(function() {
     Craft::$app->getSites()->refreshSites();
+    LinkAudit::getInstance()->getInternalResolver()->clearMemo();
 
     // Plugin settings are a process-level singleton that RefreshesDatabase does
     // not roll back, and one that also loads from the dev project config. Put

@@ -145,6 +145,16 @@ class SettingsModel extends Model
     public array $excludedCategoryGroupUids = [];
 
     /**
+     * @var string[] Field UIDs whose content is never read for links.
+     *
+     * For a field that holds content nobody is going to fix, such as a legacy
+     * body kept after a migration. Excluding a Matrix field skips everything
+     * nested inside it. The rendered crawl reads pages, not fields, so it still
+     * finds links a template prints from an excluded field.
+     */
+    public array $excludedFieldUids = [];
+
+    /**
      * @var bool Whether internal links are resolved against the site's own
      * elements and routes.
      */
@@ -385,6 +395,7 @@ class SettingsModel extends Model
             'concurrency' => 'Concurrent Requests',
             'connectTimeout' => 'Connect Timeout (seconds)',
             'excludedCategoryGroupUids' => 'Excluded Category Groups',
+            'excludedFieldUids' => 'Excluded Fields',
             'excludedSectionUids' => 'Excluded Sections',
             'excludedUriPatterns' => 'Excluded URI Patterns',
             'ignoreHosts' => 'Ignored Hosts',
@@ -692,7 +703,7 @@ class SettingsModel extends Model
                 'string',
             ],
             [['scannedElementTypes'], 'each', 'rule' => ['string'], 'skipOnEmpty' => true],
-            [['excludedCategoryGroupUids', 'excludedSectionUids'], 'each', 'rule' => ['string'], 'skipOnEmpty' => true],
+            [['excludedCategoryGroupUids', 'excludedFieldUids', 'excludedSectionUids'], 'each', 'rule' => ['string'], 'skipOnEmpty' => true],
             [
                 [
                     'botHostileHosts',

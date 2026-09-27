@@ -113,7 +113,7 @@ class UrlActionsController extends BaseController
             );
         }
 
-        $checked = LinkAudit::$plugin->getScanService()->checkChunk([$row]);
+        $checked = LinkAudit::$plugin->getScanService()->checkChunk([$row], inline: true);
 
         if ($checked === 0) {
             return $this->_respond(
@@ -232,7 +232,7 @@ class UrlActionsController extends BaseController
 
         $report = LinkAudit::$plugin->getReportService();
         $row = $report->urlByHash($hash);
-        $checked = $row !== null ? LinkAudit::$plugin->getScanService()->checkChunk([$row]) : 0;
+        $checked = $row !== null ? LinkAudit::$plugin->getScanService()->checkChunk([$row], inline: true) : 0;
 
         if ($checked === 0) {
             return $this->_respond(
