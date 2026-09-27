@@ -29,6 +29,7 @@
     "php": "^8.2"
   },
   "require-dev": {
+    "craftcms/commerce": "^5.0",
     "craftcms/ecs": "dev-main",
     "craftcms/html-field": "^1.0 || ^2.0 || ^3.0",
     "craftcms/phpstan": "dev-main",
