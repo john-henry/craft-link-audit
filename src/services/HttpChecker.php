@@ -16,6 +16,7 @@ use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\events\DefineVerdictEvent;
 use johnhenry\linkaudit\exceptions\UnsafeUrlException;
 use johnhenry\linkaudit\helpers\BotBlockHeuristics;
+use johnhenry\linkaudit\helpers\CappedStream;
 use johnhenry\linkaudit\helpers\UrlSafety;
 use johnhenry\linkaudit\LinkAudit;
 use johnhenry\linkaudit\models\Verdict;
@@ -44,7 +45,7 @@ use yii\base\Component;
  * into the client, so an injected bare client behaves exactly like the built-in
  * one.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class HttpChecker extends Component
@@ -60,6 +61,13 @@ class HttpChecker extends Component
     public const EVENT_DEFINE_VERDICT = 'defineVerdict';
 
     /**
+     * @var int Longest `Retry-After` honoured, in seconds. A server asking for
+     * longer is checked again after a day; the raw value can overflow a date
+     * column and stop the scan.
+     */
+    public const MAX_RETRY_AFTER_SECONDS = 86400;
+
+    /**
      * @var int How many bytes of a GET response body are read, to look for a
      * bot-block signature the headers did not carry.
      */
@@ -73,11 +81,12 @@ class HttpChecker extends Component
 
     /**
      * @var int[] Status codes worth one GET before they are believed: a 400 or
-     * 403 is often a server that dislikes the method rather than the URL, and a
-     * 503 is where a CAPTCHA hides. Only retried when nothing in the headers
+     * 403 is often a server that dislikes the method rather than the URL, some
+     * servers answer every HEAD with a 404 or 410, and a 503 is where a CAPTCHA
+     * hides. Only retried when nothing in the headers
      * already says the refusal was aimed at robots.
      */
-    private const _HEAD_SUSPECT_STATUSES = [400, 403, 503];
+    private const _HEAD_SUSPECT_STATUSES = [400, 403, 404, 410, 503];
 
     /**
      * @var string The Range header sent with the GET fallback.
@@ -102,7 +111,7 @@ class HttpChecker extends Component
      *
      * @param string $url The absolute, normalised URL to check.
      * @return Verdict What the URL had to say for itself.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function check(string $url): Verdict
@@ -122,7 +131,7 @@ class HttpChecker extends Component
      *
      * @param string $url The absolute, normalised URL to check.
      * @return PromiseInterface A promise fulfilled with a {@see Verdict}.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function checkAsync(string $url): PromiseInterface
@@ -155,7 +164,7 @@ class HttpChecker extends Component
      * The HTTP client requests go out on.
      *
      * @return ClientInterface The client.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getClient(): ClientInterface
@@ -163,7 +172,7 @@ class HttpChecker extends Component
         if ($this->_client === null) {
             // Craft's own Guzzle config is the base, so a project's config/guzzle.php
             // still applies. Everything this plugin decides is passed per request.
-            $this->_client = Craft::createGuzzleClient();
+            $this->_client = Craft::createGuzzleClient(['handler' => UrlSafety::pinnedHandlerStack()]);
         }
 
         return $this->_client;
@@ -175,7 +184,7 @@ class HttpChecker extends Component
      *
      * @param ClientInterface $client The client to use.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function setClient(ClientInterface $client): void
@@ -196,7 +205,7 @@ class HttpChecker extends Component
      * @param Verdict $verdict The verdict the status code alone suggested.
      * @param string $signature The bot-block signature that matched.
      * @return Verdict The recast verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _blockedVerdict(Verdict $verdict, string $signature): Verdict
@@ -225,7 +234,7 @@ class HttpChecker extends Component
      * @param string|null $bodySnippet The first couple of kilobytes of the body,
      *                                 when a GET provided one.
      * @return string|null The signature that matched.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _blockSignature(
@@ -257,7 +266,7 @@ class HttpChecker extends Component
      * @param ResponseInterface $response The response.
      * @return string|null The snippet, or null when there was nothing worth
      *                     reading.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _bodySnippet(ResponseInterface $response): ?string
@@ -270,6 +279,7 @@ class HttpChecker extends Component
 
         try {
             $body = $response->getBody();
+            $body->rewind();
             $snippet = $body->read(self::_BODY_SNIPPET_BYTES);
             $body->close();
         } catch (Throwable $e) {
@@ -292,7 +302,7 @@ class HttpChecker extends Component
      * @param string|null $finalUrl Where a redirect chain ended up.
      * @param Verdict $verdict The verdict as the checker sees it.
      * @return Verdict Whatever the listeners left behind.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _defineVerdict(
@@ -330,7 +340,7 @@ class HttpChecker extends Component
      *
      * @param UnsafeUrlException $e The refusal.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _guardRefusal(UnsafeUrlException $e): Verdict
@@ -366,7 +376,7 @@ class HttpChecker extends Component
      * @param string $method The request method that failed.
      * @param int $elapsedMs How long it took to fail.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _mapError(Throwable $error, string $method, int $elapsedMs): Verdict
@@ -429,7 +439,7 @@ class HttpChecker extends Component
      * @param string $method The request method that produced it.
      * @param int $elapsedMs How long it took.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _mapResponse(ResponseInterface $response, string $method, int $elapsedMs): Verdict
@@ -483,6 +493,20 @@ class HttpChecker extends Component
             );
         }
 
+        // A login wall says nothing about whether the page is there.
+        if ($status === 401 || $status === 407) {
+            return new Verdict(
+                status: UrlStatus::Blocked,
+                httpStatus: $status,
+                method: $method,
+                finalUrl: $redirectCount > 0 ? $finalUrl : null,
+                redirectCount: $redirectCount,
+                reason: Verdict::REASON_HTTP,
+                message: 'This page needs a login, so whether it works can\'t be checked from here.',
+                responseTimeMs: $elapsedMs,
+            );
+        }
+
         // Everything else the server answered with, 404 and 410 first among
         // them, is the link being wrong.
         return new Verdict(
@@ -502,7 +526,7 @@ class HttpChecker extends Component
      *
      * @param string $message The error's message.
      * @return string One of the {@see Verdict} REASON_* constants.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _reasonForError(string $message): string
@@ -534,7 +558,7 @@ class HttpChecker extends Component
      *
      * @param ResponseInterface $response The response.
      * @return string The phrase.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _reasonPhrase(ResponseInterface $response): string
@@ -561,7 +585,7 @@ class HttpChecker extends Component
      * @return array{0: int, 1: string|null, 2: bool, 3: int|null} The hop count,
      *         the final URL, whether any hop was permanent, and the first hop's
      *         status code.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _redirectInfo(ResponseInterface $response): array
@@ -597,7 +621,7 @@ class HttpChecker extends Component
      * @param ResponseInterface $response The response.
      * @return int|null The delay in seconds, or null when the header is missing
      *                  or unreadable.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _retryAfterSeconds(ResponseInterface $response): ?int
@@ -609,7 +633,7 @@ class HttpChecker extends Component
         }
 
         if (ctype_digit($value)) {
-            return (int)$value;
+            return min(self::MAX_RETRY_AFTER_SECONDS, (int)substr($value, 0, 9));
         }
 
         $timestamp = strtotime($value);
@@ -618,7 +642,7 @@ class HttpChecker extends Component
             return null;
         }
 
-        return max(0, $timestamp - time());
+        return min(self::MAX_RETRY_AFTER_SECONDS, max(0, $timestamp - time()));
     }
 
     /**
@@ -629,7 +653,7 @@ class HttpChecker extends Component
      *
      * @param string $method The request method.
      * @return array<string, mixed> The options.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _requestOptions(string $method): array
@@ -658,11 +682,12 @@ class HttpChecker extends Component
         }
 
         if ($method === 'GET') {
-            // Ask for the first couple of kilobytes and stream them, so a server
-            // that ignores the Range header still costs nothing: the body is
-            // closed the moment the headers have been read.
+            // Ask for the first couple of kilobytes, and keep no more than that
+            // of whatever a server that ignores the Range header sends. It goes
+            // through cURL, not Guzzle's stream handler, so the request timeout
+            // covers the whole transfer rather than each read.
             $options[RequestOptions::HEADERS]['Range'] = self::_RANGE_HEADER;
-            $options[RequestOptions::STREAM] = true;
+            $options[RequestOptions::SINK] = new CappedStream(self::_BODY_SNIPPET_BYTES);
         }
 
         return $options;
@@ -675,7 +700,7 @@ class HttpChecker extends Component
      * @param string $method The request method.
      * @return PromiseInterface A promise fulfilled with an outcome array of
      *         `method`, `response`, `error` and `elapsedMs`.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _send(string $url, string $method): PromiseInterface
@@ -708,7 +733,7 @@ class HttpChecker extends Component
      * @param array{method: string, response: ResponseInterface|null, error: Throwable|null, elapsedMs: int} $outcome
      *        What came back.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _verdictFor(string $url, array $outcome): Verdict
@@ -764,14 +789,16 @@ class HttpChecker extends Component
      * on.
      *
      * A 405 or 501 is the server saying it does not do HEAD. A 400 or 403 is
-     * often the same thing said badly. A 503 is where a CAPTCHA hides, and only
-     * a body can tell that from a server that is genuinely having a bad day.
+     * often the same thing said badly, and some servers answer every HEAD with
+     * a 404 or 410, so those are confirmed before a link is called broken. A
+     * 503 is where a CAPTCHA hides, and only a body can tell that from a server
+     * that is genuinely having a bad day.
      *
      * @param string $url The URL that was requested.
      * @param array{method: string, response: ResponseInterface|null, error: Throwable|null, elapsedMs: int} $outcome
      *        What came back from the HEAD.
      * @return bool Whether to try a GET.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _worthOneGet(string $url, array $outcome): bool

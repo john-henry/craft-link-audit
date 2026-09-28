@@ -19,6 +19,7 @@ use GuzzleHttp\RequestOptions;
 use johnhenry\linkaudit\enums\LinkKind;
 use johnhenry\linkaudit\enums\SchemeKind;
 use johnhenry\linkaudit\exceptions\UnsafeUrlException;
+use johnhenry\linkaudit\helpers\CappedStream;
 use johnhenry\linkaudit\helpers\HtmlParser;
 use johnhenry\linkaudit\helpers\UrlNormaliser;
 use johnhenry\linkaudit\helpers\UrlSafety;
@@ -57,7 +58,7 @@ use yii\base\Component;
  * applied all the same, and every redirect hop with it, because a page is free
  * to redirect anywhere at all.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class PageCrawler extends Component
@@ -107,7 +108,7 @@ class PageCrawler extends Component
      * @param string $pageUrl The page URL, with any fragment already off it.
      * @return string[]|null The anchor names, or null when the page could not be
      *                       read at all.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function anchorsFor(string $pageUrl): ?array
@@ -137,7 +138,7 @@ class PageCrawler extends Component
      * @return bool Whether the page was fetched and read.
      * @throws Exception If the page URL cannot be built.
      * @throws Throwable If the reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function crawlPage(array $page, ?int $scanId = null): bool
@@ -194,7 +195,7 @@ class PageCrawler extends Component
      * @param string $url The absolute page URL.
      * @return string|null The HTML, or null when the page did not answer with
      *                     any.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function fetch(string $url): ?string
@@ -236,6 +237,10 @@ class PageCrawler extends Component
 
         try {
             $body = $response->getBody();
+            // The sink is sitting where the transfer finished writing, so it
+            // has to be wound back before anything reads it. Left alone it
+            // reads as empty and every page comes back with no links on it.
+            $body->rewind();
             $html = $body->read(self::_MAX_BODY_BYTES);
             $body->close();
         } catch (Throwable $e) {
@@ -255,7 +260,7 @@ class PageCrawler extends Component
      * point.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function flush(): void
@@ -268,13 +273,13 @@ class PageCrawler extends Component
      * The HTTP client pages are fetched on.
      *
      * @return ClientInterface The client.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getClient(): ClientInterface
     {
         if ($this->_client === null) {
-            $this->_client = Craft::createGuzzleClient();
+            $this->_client = Craft::createGuzzleClient(['handler' => UrlSafety::pinnedHandlerStack()]);
         }
 
         return $this->_client;
@@ -291,7 +296,7 @@ class PageCrawler extends Component
      * @param int[] $siteIds The sites to cover.
      * @return Query The query, ordered so paging cannot skip a page and limited
      *               to the page cap.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function pageQuery(array $siteIds): Query
@@ -308,7 +313,7 @@ class PageCrawler extends Component
      *
      * @param int[] $siteIds The sites the crawl covers.
      * @return int How many pages were left out.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function reportCappedPages(array $siteIds): int
@@ -334,7 +339,7 @@ class PageCrawler extends Component
      *
      * @param ClientInterface $client The client to use.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function setClient(ClientInterface $client): void
@@ -348,7 +353,7 @@ class PageCrawler extends Component
      *
      * @param int[] $siteIds The sites to cover.
      * @return Query The query.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function uncappedPageQuery(array $siteIds): Query
@@ -366,7 +371,7 @@ class PageCrawler extends Component
      * The page cap, floored at one.
      *
      * @return int The cap.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _cap(): int
@@ -389,7 +394,7 @@ class PageCrawler extends Component
      * @param string $elementType That element's class.
      * @param int $siteId The site it was fetched on.
      * @return ExtractedLink[] The links found.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _linksFrom(
@@ -469,7 +474,7 @@ class PageCrawler extends Component
      * @param int $siteId The site it was fetched on.
      * @return ExtractedLink|null The link, or null when there is nothing to
      *                            record.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _link(
@@ -508,7 +513,7 @@ class PageCrawler extends Component
             siteId: $siteId,
             url: $normalised,
             rawHref: $rawHref,
-            linkText: $this->_tidyText($linkText),
+            linkText: HtmlParser::tidyLinkText($linkText),
             source: ExtractedLink::SOURCE_RENDERED,
         );
     }
@@ -524,7 +529,7 @@ class PageCrawler extends Component
      * @param int $siteId The site.
      * @return string|null The URL, or null when the site serves none.
      * @throws Exception If the site URL cannot be built.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _pageUrl(?string $uri, int $siteId): ?string
@@ -547,7 +552,7 @@ class PageCrawler extends Component
      * outside world, and these requests never leave the building.
      *
      * @return array<string, mixed> The options.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _requestOptions(): array
@@ -566,9 +571,16 @@ class PageCrawler extends Component
             ],
             // A status code is the answer here, never an exception.
             RequestOptions::HTTP_ERRORS => false,
-            // Read the headers, then take only as much of the body as the cap
-            // allows, so one enormous page cannot take a crawl down.
-            RequestOptions::STREAM => true,
+            // A sink rather than STREAM, which looks like the obvious way to
+            // avoid holding a huge page and is not: Guzzle serves a streamed
+            // request through its stream handler, and that handler has no
+            // connect timeout. The Connect Timeout setting was being dropped
+            // on every page fetched, so a host that accepts nothing cost the
+            // whole request timeout instead.
+            //
+            // Keeps the first two megabytes and drops the rest, so a huge or
+            // endlessly decompressing page costs time, never memory or disk.
+            RequestOptions::SINK => new CappedStream(self::_MAX_BODY_BYTES),
             RequestOptions::TIMEOUT => $settings->timeout,
             RequestOptions::VERIFY => $settings->verifySsl,
         ];
@@ -578,7 +590,7 @@ class PageCrawler extends Component
      * The plugin's settings.
      *
      * @return SettingsModel The settings.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _settings(): SettingsModel
@@ -590,7 +602,7 @@ class PageCrawler extends Component
      * The base URL of every site that serves one.
      *
      * @return string[] The base URLs.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _siteBaseUrls(): array
@@ -622,7 +634,7 @@ class PageCrawler extends Component
      * @param int|null $scanId The scan to stamp the reference rows with.
      * @return void
      * @throws Throwable If the reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _store(array $links, int $elementId, int $siteId, ?int $scanId): void
@@ -670,7 +682,7 @@ class PageCrawler extends Component
      *
      * @param string $host The host about to be asked.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _throttle(string $host): void
@@ -684,25 +696,5 @@ class PageCrawler extends Component
         }
 
         $this->_lastRequestAt[$host] = microtime(true);
-    }
-
-    /**
-     * Collapses the whitespace out of anchor text and clips it to something a
-     * report column can hold.
-     *
-     * @param string|null $text The text as it was found.
-     * @return string|null The tidied text, or null when there was none.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    private function _tidyText(?string $text): ?string
-    {
-        if ($text === null) {
-            return null;
-        }
-
-        $tidied = trim((string)preg_replace('/\s+/u', ' ', $text));
-
-        return $tidied !== '' ? mb_substr($tidied, 0, 255) : null;
     }
 }

@@ -27,7 +27,7 @@ use yii\base\InvalidConfigException;
  * @property-read ScanService $scanService
  * @property-read UninstallService $uninstallService
  * @property-read UrlStore $urlStore
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 trait ServicesTrait
@@ -40,7 +40,7 @@ trait ServicesTrait
      * @inheritdoc
      *
      * @return array The plugin configuration, including registered service components.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function config(): array
@@ -73,7 +73,7 @@ trait ServicesTrait
      *
      * @return ExportService The export service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getExportService(): ExportService
@@ -89,7 +89,7 @@ trait ServicesTrait
      *
      * @return HostState The host state service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getHostState(): HostState
@@ -105,7 +105,7 @@ trait ServicesTrait
      *
      * @return HttpChecker The HTTP checker service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getHttpChecker(): HttpChecker
@@ -121,7 +121,7 @@ trait ServicesTrait
      *
      * @return IgnoreService The ignore service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getIgnoreService(): IgnoreService
@@ -137,7 +137,7 @@ trait ServicesTrait
      *
      * @return InternalResolver The internal resolver service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getInternalResolver(): InternalResolver
@@ -153,7 +153,7 @@ trait ServicesTrait
      *
      * @return LinkExtractor The link extractor service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getLinkExtractor(): LinkExtractor
@@ -169,7 +169,7 @@ trait ServicesTrait
      *
      * @return NotificationService The notification service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getNotificationService(): NotificationService
@@ -185,7 +185,7 @@ trait ServicesTrait
      *
      * @return PageCrawler The page crawler service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getPageCrawler(): PageCrawler
@@ -201,7 +201,7 @@ trait ServicesTrait
      *
      * @return ReportService The report service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getReportService(): ReportService
@@ -217,7 +217,7 @@ trait ServicesTrait
      *
      * @return RequestScheduler The request scheduler service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getRequestScheduler(): RequestScheduler
@@ -233,7 +233,7 @@ trait ServicesTrait
      *
      * @return ScanService The scan service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getScanService(): ScanService
@@ -249,7 +249,7 @@ trait ServicesTrait
      *
      * @return UninstallService The uninstall service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getUninstallService(): UninstallService
@@ -265,7 +265,7 @@ trait ServicesTrait
      *
      * @return UrlStore The URL store service instance.
      * @throws InvalidConfigException If the component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getUrlStore(): UrlStore

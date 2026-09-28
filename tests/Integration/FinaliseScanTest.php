@@ -93,9 +93,8 @@ function laFinaliseReferenceCount(int $elementId): int
 /**
  * Empties the URL and reference tables, in foreign key order.
  *
- * For the tests that assert an exact count. This suite runs against a
- * development database carrying whatever the last real scan left behind, and the
- * broken count is a count of everything the installation is still holding.
+ * For the tests that assert an exact count: the broken count covers every row
+ * the installation holds, including any the test database already carries.
  */
 function laFinaliseClearUrls(): void
 {
@@ -142,7 +141,9 @@ it('deletes the URL row left behind when an author removes the last link to it',
     $entry->setFieldValue('laBody', '<p>No links here any more.</p>');
     Craft::$app->getElements()->saveElement($entry);
 
-    $rescanId = laFinaliseScanRow(ScanMode::Single, $siteId);
+    // An incremental run: a single-page reread leaves the orphan sweep to the
+    // next scan, so it doesn't sweep the whole table inside a web request.
+    $rescanId = laFinaliseScanRow(ScanMode::Incremental, $siteId);
     $service->extractElement((int)$entry->id, null, $siteId, $rescanId);
 
     expect(laFinaliseReferenceCount((int)$entry->id))->toBe(0)
@@ -163,9 +164,8 @@ it('leaves a URL row alone while its references are still being written', functi
     $service = LinkAudit::getInstance()->getScanService();
 
     // Exactly what extraction leaves behind between storing a URL and inserting
-    // the reference rows that point at it. A scan finishing in that window used
-    // to delete the row out from under the insert, and the foreign key error
-    // that followed took the extracting job down with it.
+    // the reference rows that point at it. Deleting the row in that window
+    // would fail the reference insert on its foreign key.
     $freshId = $store->upsert('https://example.com/still-being-written', false);
     $oldId = $store->upsert('https://example.com/genuinely-orphaned', false);
     laAgeUrl($oldId);

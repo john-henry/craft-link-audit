@@ -32,7 +32,7 @@ use yii\web\Response;
  * that verdict means; everything else, including the paging, the sorting and the
  * filters, is the same question with a different value in it.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class UrlsController extends BaseController
@@ -78,7 +78,7 @@ class UrlsController extends BaseController
      * @throws ForbiddenHttpException If the user may not read the reports.
      * @throws InvalidConfigException If a service or the site cannot be
      *                                resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionBlocked(): Response
@@ -93,7 +93,7 @@ class UrlsController extends BaseController
      * @throws ForbiddenHttpException If the user may not read the reports.
      * @throws InvalidConfigException If a service or the site cannot be
      *                                resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionBroken(): Response
@@ -110,7 +110,7 @@ class UrlsController extends BaseController
      *                                resolved.
      * @throws NotFoundHttpException If no URL has been seen with that hash, or
      *                               nothing on the user's sites points at it.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionDetail(): Response
@@ -182,7 +182,7 @@ class UrlsController extends BaseController
      * @throws ForbiddenHttpException If the user may not read the reports.
      * @throws InvalidConfigException If a service or the site cannot be
      *                                resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionIgnored(): Response
@@ -218,7 +218,7 @@ class UrlsController extends BaseController
      * @throws ForbiddenHttpException If the user may not read the reports.
      * @throws InvalidConfigException If a service or the site cannot be
      *                                resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionNoAnswer(): Response
@@ -233,7 +233,7 @@ class UrlsController extends BaseController
      * @throws ForbiddenHttpException If the user may not read the reports.
      * @throws InvalidConfigException If a service or the site cannot be
      *                                resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionRedirects(): Response
@@ -257,7 +257,7 @@ class UrlsController extends BaseController
      * @throws InvalidConfigException If a service cannot be resolved.
      * @throws NotFoundHttpException If no such reference exists, or it sits on
      *                               a site the reader may not edit.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionReferenceLocation(): Response
@@ -288,7 +288,7 @@ class UrlsController extends BaseController
      * @throws ForbiddenHttpException If the user may not read the reports.
      * @throws InvalidConfigException If a service or the site cannot be
      *                                resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionTable(): Response
@@ -338,7 +338,7 @@ class UrlsController extends BaseController
      *
      * @param mixed $value The stored value.
      * @return string The formatted date, or an empty string when there is none.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _formatDate(mixed $value): string
@@ -370,7 +370,7 @@ class UrlsController extends BaseController
      *
      * @param array<string, mixed> $url The URL row.
      * @return bool Whether it may be drawn as an anchor.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _isOpenable(array $url): bool
@@ -389,7 +389,7 @@ class UrlsController extends BaseController
      * @throws ForbiddenHttpException If the user may not read the reports.
      * @throws InvalidConfigException If a service or the site cannot be
      *                                resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _list(UrlStatus $status, string $template): Response
@@ -441,7 +441,7 @@ class UrlsController extends BaseController
      *
      * @param string $message The stored message, already trimmed.
      * @return string|null The message worth showing, or null when there is none.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _plainMessage(string $message): ?string
@@ -469,7 +469,7 @@ class UrlsController extends BaseController
      * @param int $siteId The site the table is being read on, for the label a
      *                    stand-in row borrows from its target element.
      * @return array<string, mixed> The row for the table.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _row(array $row, int $siteId): array
@@ -525,7 +525,7 @@ class UrlsController extends BaseController
      * @param string $hash The sha1 of the normalised URL.
      * @return array<string, mixed>|null What they may do, or null when the answer
      *                                   is nothing.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _rowActions(string $hash): ?array
@@ -551,7 +551,7 @@ class UrlsController extends BaseController
      *
      * @param UrlStatus $status The verdict.
      * @return string The subnav item key.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _subnavItemFor(UrlStatus $status): string
@@ -573,7 +573,7 @@ class UrlsController extends BaseController
      *
      * @param mixed $value The stored value.
      * @return DateTime|null The date, or null when there is none.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _toDate(mixed $value): ?DateTime

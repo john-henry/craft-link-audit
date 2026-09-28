@@ -14,10 +14,15 @@ use yii\base\Exception;
  *
  * Two full runs at once are two workers rebuilding the same reference rows,
  * pruning each other's findings and taking rows out of the pending set the other
- * one is paging through. Carries the id of the run that is already going, so the
- * control panel and the console can say which one to wait for.
+ * one is paging through.
  *
- * @author John Henry Donovan
+ * The id of the run already going is carried twice: in the message, which the
+ * console prints and the scheduler logs, and as [[$scanId]] for anything that
+ * would rather read it than pick it out of a sentence. The control panel needs
+ * neither, because it refuses the start and sends the reader back to the page
+ * the running scan is already reporting its progress on.
+ *
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ScanInProgressException extends Exception
@@ -41,7 +46,7 @@ class ScanInProgressException extends Exception
      * @param int $scanId The scan that is already running.
      * @param int $code The exception code.
      * @param Throwable|null $previous The previous exception, if any.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function __construct(int $scanId, int $code = 0, ?Throwable $previous = null)
@@ -59,7 +64,7 @@ class ScanInProgressException extends Exception
      * @inheritdoc
      *
      * @return string The user-friendly name of this exception.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getName(): string

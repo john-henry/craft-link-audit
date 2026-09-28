@@ -83,7 +83,7 @@ describe('Saving one tab', function() {
             'notifyBrokenThreshold' => 7,
             'okTtlDays' => 45,
             'excludedUriPatterns' => [
-                ['enabled' => true, 'siteId' => '', 'uriPattern' => '^checkout'],
+                ['enabled' => true, 'siteUid' => '', 'uriPattern' => '^checkout'],
             ],
         ]);
 
@@ -114,7 +114,7 @@ describe('Saving one tab', function() {
             ->and($stored['notifyBrokenThreshold'])->toBe(7)
             ->and($stored['okTtlDays'])->toBe(45)
             ->and($stored['excludedUriPatterns'])->toBe([
-                ['enabled' => true, 'siteId' => '', 'uriPattern' => '^checkout'],
+                ['enabled' => true, 'siteUid' => '', 'uriPattern' => '^checkout'],
             ]);
     });
 
@@ -213,12 +213,15 @@ describe('A refused save', function() {
 
 describe('The editable tables', function() {
     it('takes the rows back in the shape the scanner reads them', function() {
+        $siteUid = (string)Craft::$app->getSites()->getPrimarySite()->uid;
+
         $this->post('actions/link-audit/settings/save-scanning', [
             'settings' => [
                 'excludedUriPatterns' => [
-                    ['enabled' => '1', 'siteId' => '', 'uriPattern' => '^checkout'],
-                    ['enabled' => '', 'siteId' => '', 'uriPattern' => 'print$'],
-                    ['enabled' => '1', 'siteId' => '', 'uriPattern' => ''],
+                    ['enabled' => '1', 'siteUid' => '', 'uriPattern' => '^checkout'],
+                    ['enabled' => '', 'siteUid' => $siteUid, 'uriPattern' => 'print$'],
+                    ['enabled' => '1', 'siteUid' => 'not-a-site', 'uriPattern' => 'archive$'],
+                    ['enabled' => '1', 'siteUid' => '', 'uriPattern' => ''],
                 ],
                 'internalUrlAllowPatterns' => [
                     ['pattern' => '^downloads/', 'note' => 'Served straight off disk'],
@@ -229,9 +232,12 @@ describe('The editable tables', function() {
 
         $stored = settingsStored();
 
+        // A site is kept by UID, and anything that isn't a real site's UID
+        // falls back to every site.
         expect($stored['excludedUriPatterns'])->toBe([
-            ['enabled' => true, 'siteId' => '', 'uriPattern' => '^checkout'],
-            ['enabled' => false, 'siteId' => '', 'uriPattern' => 'print$'],
+            ['enabled' => true, 'siteUid' => '', 'uriPattern' => '^checkout'],
+            ['enabled' => false, 'siteUid' => $siteUid, 'uriPattern' => 'print$'],
+            ['enabled' => true, 'siteUid' => '', 'uriPattern' => 'archive$'],
         ])
             ->and($stored['internalUrlAllowPatterns'])->toBe([
                 ['pattern' => '^downloads/', 'note' => 'Served straight off disk'],
@@ -242,7 +248,7 @@ describe('The editable tables', function() {
         $this->post('actions/link-audit/settings/save-scanning', [
             'settings' => [
                 'excludedUriPatterns' => [
-                    ['enabled' => '1', 'siteId' => '', 'uriPattern' => '^checkout'],
+                    ['enabled' => '1', 'siteUid' => '', 'uriPattern' => '^checkout'],
                 ],
             ],
             'redirect' => settingsRedirect('scanning'),

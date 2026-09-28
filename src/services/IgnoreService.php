@@ -59,7 +59,7 @@ use yii\base\Component;
  * {@see Verdict::REASON_IGNORE_RULE} for a rule, the latter naming the rule in
  * its message.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class IgnoreService extends Component
@@ -99,7 +99,7 @@ class IgnoreService extends Component
      * For the tests, and for a long running worker that has just written one.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function flush(): void
@@ -126,7 +126,7 @@ class IgnoreService extends Component
      * @return array<int, array<string, mixed>> The rows, each carrying the URL,
      *                                          the note, when it was made and who
      *                                          made it.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function ignoredUrls(int $limit = 200, ?array $siteIds = null): array
@@ -177,7 +177,7 @@ class IgnoreService extends Component
      * @param int[]|null $siteIds The sites whose content scopes the answer, or
      *                            null for every decision.
      * @return int The count.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function ignoredCount(?array $siteIds = null): int
@@ -215,7 +215,7 @@ class IgnoreService extends Component
      * @param int|null $userId Who decided.
      * @return bool Whether it was ignored. False means no URL has been seen with
      *              that hash, so there is nothing to ignore.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function ignoreUrl(string $urlHash, ?string $note = null, ?int $userId = null): bool
@@ -270,7 +270,7 @@ class IgnoreService extends Component
      *
      * @param string $urlHash The sha1 of the normalised URL.
      * @return bool Whether there is a row for it.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isHashIgnored(string $urlHash): bool
@@ -285,7 +285,7 @@ class IgnoreService extends Component
      * @param string $url The normalised URL.
      * @param string|null $urlHash Its hash, when the caller already has it.
      * @return bool Whether the URL should be left alone.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isIgnored(string $url, ?string $urlHash = null): bool
@@ -312,7 +312,7 @@ class IgnoreService extends Component
      * @param string $urlHash The sha1 of the normalised URL.
      * @return bool Whether anything was put back. False means the URL was not
      *              ignored in the first place.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function restoreUrl(string $urlHash): bool
@@ -340,7 +340,7 @@ class IgnoreService extends Component
      * @param string $url The normalised URL.
      * @return string|null The rule as the author wrote it, for the message on the
      *                     URL row, or null when nothing matches.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function ruleFor(string $url): ?string
@@ -374,7 +374,7 @@ class IgnoreService extends Component
      * @param string|null $urlHash Its hash, when the caller already has it.
      * @return Verdict|null The verdict, or null when the URL is to be checked as
      *                      normal.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function verdictFor(string $url, ?string $urlHash = null): ?Verdict
@@ -408,7 +408,7 @@ class IgnoreService extends Component
      * Every hash carrying an ignore row, keyed by hash.
      *
      * @return array<string, bool> The hashes.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _ignoredHashes(): array
@@ -441,7 +441,7 @@ class IgnoreService extends Component
      * @param string $pattern The pattern from the settings.
      * @param string $url The normalised URL.
      * @return bool Whether it matches.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _matchesPattern(string $pattern, string $url): bool
@@ -461,7 +461,7 @@ class IgnoreService extends Component
      *
      * @param string $urlHash The sha1 of the normalised URL.
      * @return int|null The row id, or null when there is none.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _rowIdFor(string $urlHash): ?int
@@ -479,7 +479,7 @@ class IgnoreService extends Component
      * The plugin's settings.
      *
      * @return SettingsModel The settings.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _settings(): SettingsModel
@@ -492,7 +492,7 @@ class IgnoreService extends Component
      *
      * @param string|null $value The value to clip.
      * @return string|null The clipped value.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _truncate(?string $value): ?string
@@ -508,7 +508,7 @@ class IgnoreService extends Component
      *
      * @param int $urlId The URL row.
      * @return string|null The URL, or null when the row is gone.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _urlFor(int $urlId): ?string
@@ -527,7 +527,7 @@ class IgnoreService extends Component
      *
      * @param string $urlHash The sha1 of the normalised URL.
      * @return int|null The row id, or null when the URL has not been seen.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _urlIdByHash(string $urlHash): ?int
@@ -553,7 +553,7 @@ class IgnoreService extends Component
      * @param string $column The column holding the rule.
      * @return string[] The rules, trimmed, with the blanks and the disabled rows
      *                  dropped.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _values(array $rows, string $column): array

@@ -10,9 +10,12 @@ use Craft;
 use craft\base\Element;
 use craft\db\Query;
 use craft\db\Table;
+use craft\elements\Entry;
+use craft\helpers\Db;
 use craft\models\Site;
 use craft\services\ProjectConfig;
 use craft\web\UrlRule;
+use DateTime;
 use johnhenry\linkaudit\enums\LinkKind;
 use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\helpers\UrlNormaliser;
@@ -32,12 +35,17 @@ use yii\base\Component;
  * its site would store, and looked up against the elements on that site.
  *
  * The order matters, and it is built around not crying wolf. A live element
- * match settles it. An element sitting at that URI with its switch off settles
- * it too, and is said plainly, because the server would answer that address with
- * a 404 that tells the author less than the database already knows. A
- * template-only route in `config/routes.php` or the project config serves a real
- * page no element knows about, so the routes are asked before anything else, and
- * the `internalUrlAllowPatterns` escape hatch has its say after that.
+ * match settles it. A template-only route in `config/routes.php` or the project
+ * config serves a real page no element knows about, so the routes are asked
+ * alongside it, and the `internalUrlAllowPatterns` escape hatch has its say
+ * after that.
+ *
+ * A disabled element sitting at the address settles nothing, and is left to the
+ * server. Retiring a page by switching its entry off and putting a redirect over
+ * the address is ordinary housekeeping, and the database cannot tell that apart
+ * from a page nobody can reach. The exception is a relation, which is not a
+ * rendered address: there the disabled target is the whole answer, and so is a
+ * target carrying no URL at all.
  *
  * What none of those answers for is left pending rather than called broken, and
  * the HTTP check phase an external link goes through asks the server for it. The
@@ -49,7 +57,7 @@ use yii\base\Component;
  * off, and a 301 an editor should be acting on would be reported as the one
  * thing it is not.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class InternalResolver extends Component
@@ -74,6 +82,13 @@ class InternalResolver extends Component
      */
     private array $_routePatterns = [];
 
+    /**
+     * @var array<string, Verdict|null> Internal URL verdicts already worked out
+     * in this job, keyed by site and URL. The same footer link turns up on every
+     * page, and each lookup costs queries.
+     */
+    private array $_urlMemo = [];
+
     // =========================================================================
     // Public Methods
     // =========================================================================
@@ -93,7 +108,7 @@ class InternalResolver extends Component
      * @param ExtractedLink $link The link to resolve.
      * @return Verdict|null The verdict, or null when the link is external or is
      *                      being left for the check phase.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function resolve(ExtractedLink $link): ?Verdict
@@ -105,7 +120,7 @@ class InternalResolver extends Component
         return match ($link->kind) {
             LinkKind::External => null,
             LinkKind::Ignored => new Verdict(status: UrlStatus::Ignored),
-            LinkKind::Internal => $this->resolveUrl($link->url, $link->siteId),
+            LinkKind::Internal => $this->_resolveUrlMemoised($link->url, $link->siteId),
             LinkKind::Element => $this->resolveElement(
                 $link->targetElementId ?? 0,
                 $link->targetElementType,
@@ -150,7 +165,7 @@ class InternalResolver extends Component
      *                         broken.
      * @return Verdict|null The verdict, or null when only a request can
      *                      answer and the link is left for the check phase.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function resolveElement(
@@ -160,7 +175,7 @@ class InternalResolver extends Component
         bool $isRelation = false,
     ): ?Verdict {
         if (!$this->_settings()->checkInternalLinks) {
-            return new Verdict(status: UrlStatus::Ignored);
+            return new Verdict(status: UrlStatus::Ignored, reason: Verdict::REASON_SETTING);
         }
 
         if ($elementId <= 0) {
@@ -181,7 +196,12 @@ class InternalResolver extends Component
             return new Verdict(status: UrlStatus::Ignored, reason: Verdict::REASON_IGNORE_RULE);
         }
 
-        if (!$element->enabled || $element->getEnabledForSite($siteId) === false) {
+        // An entry that isn't live yet, or has expired, is served to nobody
+        // but a signed-in author, so it counts as switched off.
+        $notLive = $element instanceof Entry
+            && in_array($element->getStatus(), [Entry::STATUS_PENDING, Entry::STATUS_EXPIRED], true);
+
+        if ($notLive || !$element->enabled || $element->getEnabledForSite($siteId) === false) {
             // A disabled target that still carries a URL settles nothing for an
             // authored link: the template renders that address either way, and
             // a redirect put over a retired page answers it. The server gets
@@ -192,7 +212,9 @@ class InternalResolver extends Component
                 return null;
             }
 
-            return $this->_broken('What this points at is disabled on this site, so nobody can see it.');
+            return $this->_broken($notLive
+                ? 'What this points at is not live (scheduled for later, or expired), so nobody can see it.'
+                : 'What this points at is disabled on this site, so nobody can see it.');
         }
 
         if (!$isRelation && $element->getUrl() === null) {
@@ -215,13 +237,13 @@ class InternalResolver extends Component
      * @return Verdict|null The verdict, or null when nothing in the database
      *                      answers for the address and the HTTP check phase has
      *                      to ask the server instead.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function resolveUrl(string $url, int $siteId): ?Verdict
     {
         if (!$this->_settings()->checkInternalLinks) {
-            return new Verdict(status: UrlStatus::Ignored);
+            return new Verdict(status: UrlStatus::Ignored, reason: Verdict::REASON_SETTING);
         }
 
         $site = $this->_siteForUrl($url, $siteId);
@@ -241,7 +263,7 @@ class InternalResolver extends Component
         }
 
         if ($this->_matchesAllowPattern($uri)) {
-            return new Verdict(status: UrlStatus::Ignored);
+            return new Verdict(status: UrlStatus::Ignored, reason: Verdict::REASON_SETTING);
         }
 
         // No live element and no route answers to this address, but that is
@@ -254,16 +276,49 @@ class InternalResolver extends Component
         return null;
     }
 
+    /**
+     * Forgets the internal URL verdicts remembered so far. Called between queue
+     * jobs, so content edited in the meantime is looked up afresh.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    public function clearMemo(): void
+    {
+        $this->_urlMemo = [];
+    }
+
     // =========================================================================
     // Private Methods
     // =========================================================================
+
+    /**
+     * {@see self::resolveUrl()}, remembered for the rest of the job.
+     *
+     * @param string $url The normalised URL.
+     * @param int $siteId The site the link was found on.
+     * @return Verdict|null The verdict.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    private function _resolveUrlMemoised(string $url, int $siteId): ?Verdict
+    {
+        $key = $siteId . '|' . $url;
+
+        if (!array_key_exists($key, $this->_urlMemo)) {
+            $this->_urlMemo[$key] = $this->resolveUrl($url, $siteId);
+        }
+
+        return $this->_urlMemo[$key];
+    }
 
     /**
      * A broken verdict, with the reason every internal failure shares.
      *
      * @param string $message What to show the author.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _broken(string $message): Verdict
@@ -284,15 +339,28 @@ class InternalResolver extends Component
      * @param string $uri The URI, as `elements_sites` stores it.
      * @param int $siteId The site to look in.
      * @return bool Whether an element answers to it.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _elementExists(string $uri, int $siteId): bool
     {
+        $now = Db::prepareDateForDb(new DateTime());
+
         return (new Query())
             ->from(['elements_sites' => Table::ELEMENTS_SITES])
             ->innerJoin(['elements' => Table::ELEMENTS], '[[elements.id]] = [[elements_sites.elementId]]')
-            ->where([
+            ->leftJoin(['entries' => Table::ENTRIES], '[[entries.id]] = [[elements.id]]')
+            // An entry only answers while it's live: posted, and not yet expired.
+            ->andWhere([
+                'or',
+                ['entries.id' => null],
+                [
+                    'and',
+                    ['<=', 'entries.postDate', $now],
+                    ['or', ['entries.expiryDate' => null], ['>', 'entries.expiryDate', $now]],
+                ],
+            ])
+            ->andWhere([
                 'elements_sites.siteId' => $siteId,
                 'elements_sites.uri' => $uri,
                 'elements_sites.enabled' => true,
@@ -322,7 +390,7 @@ class InternalResolver extends Component
      *
      * @param string $url The normalised URL, fragment and all.
      * @return Verdict The verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _fragmentVerdict(string $url): Verdict
@@ -370,7 +438,7 @@ class InternalResolver extends Component
      *
      * @param string $uri The URI.
      * @return bool Whether it is allowed through.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _matchesAllowPattern(string $uri): bool
@@ -407,7 +475,7 @@ class InternalResolver extends Component
      * @param string $uri The URI.
      * @param Site $site The site.
      * @return bool Whether a route answers to it.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _matchesRoute(string $uri, Site $site): bool
@@ -434,7 +502,7 @@ class InternalResolver extends Component
      * @param string $pattern The route pattern.
      * @return string|null The regular expression, or null when the pattern is
      *                     empty.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _patternToRegex(string $pattern): ?string
@@ -485,7 +553,7 @@ class InternalResolver extends Component
      *
      * @param Site $site The site.
      * @return string[] The patterns.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _routePatterns(Site $site): array
@@ -531,7 +599,7 @@ class InternalResolver extends Component
      * The plugin's settings.
      *
      * @return SettingsModel The settings.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _settings(): SettingsModel
@@ -550,7 +618,7 @@ class InternalResolver extends Component
      * @param int $fallbackSiteId The site the link was found on, used when the
      *                            URL matches nothing better.
      * @return Site|null The site, or null when no site claims the URL.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _siteForUrl(string $url, int $fallbackSiteId): ?Site
@@ -595,7 +663,7 @@ class InternalResolver extends Component
      * @param string $url The normalised URL.
      * @param Site $site The site it belongs to.
      * @return string The URI.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _uriFor(string $url, Site $site): string

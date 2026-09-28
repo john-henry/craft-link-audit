@@ -175,7 +175,7 @@ beforeEach(function() {
     $settings->excludedUriPatterns = [
         [
             'uriPattern' => '^(?!la-fixture/' . LA_CRAWL_SLUG_PREFIX . ')',
-            'siteId' => '',
+            'siteUid' => '',
             'enabled' => true,
         ],
     ];

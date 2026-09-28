@@ -25,14 +25,46 @@ use DOMXPath;
  * complaints about the tag soup real content is full of are swallowed rather
  * than raised: this is an audit, not a validator.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class HtmlParser
 {
     // =========================================================================
+    // Const Properties
+    // =========================================================================
+
+    /**
+     * @var int The longest link text that can be stored, matching the width of
+     * `linkText` on {{%linkaudit_references}}. Anything longer is clipped here
+     * rather than truncated by the database.
+     */
+    public const LINK_TEXT_MAX_LENGTH = 255;
+
+    // =========================================================================
     // Public Methods
     // =========================================================================
+
+    /**
+     * Collapses the whitespace out of anchor text and clips it to something a
+     * report column can hold.
+     *
+     * @param string|null $text The text as it was found.
+     * @return string|null The tidied text, or null when there was none.
+     *
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    public static function tidyLinkText(?string $text): ?string
+    {
+        if ($text === null) {
+            return null;
+        }
+
+        $tidied = trim((string)preg_replace('/\s+/u', ' ', $text));
+
+        return $tidied !== '' ? mb_substr($tidied, 0, self::LINK_TEXT_MAX_LENGTH) : null;
+    }
 
     /**
      * Every anchor name a document offers, so a `#fragment` link can be told
@@ -44,7 +76,7 @@ class HtmlParser
      *
      * @param DOMDocument $document The parsed document.
      * @return string[] The anchor names, in document order and deduplicated.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function anchorNames(DOMDocument $document): array
@@ -72,7 +104,8 @@ class HtmlParser
             }
         }
 
-        return array_keys($names);
+        // PHP turns numeric string keys into ints, and `id="2024"` is still a name.
+        return array_map('strval', array_keys($names));
     }
 
     /**
@@ -81,7 +114,7 @@ class HtmlParser
      * @param string $html The document source.
      * @return DOMDocument|null The parsed document, or null when it could not be
      *                          parsed at all.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function document(string $html): ?DOMDocument
@@ -95,7 +128,7 @@ class HtmlParser
      * @param string $html The fragment source.
      * @return DOMDocument|null The parsed document, or null when it could not be
      *                          parsed at all.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function fragment(string $html): ?DOMDocument
@@ -114,7 +147,7 @@ class HtmlParser
      *                       came in.
      * @return DOMDocument|null The parsed document, or null when it could not be
      *                          parsed at all.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _load(string $source): ?DOMDocument

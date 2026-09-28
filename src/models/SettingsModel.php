@@ -20,7 +20,7 @@ use johnhenry\linkaudit\LinkAudit;
  * is trusted, what is ignored, who hears about it, and when a scan runs by
  * itself.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class SettingsModel extends Model
@@ -143,6 +143,16 @@ class SettingsModel extends Model
      * should not be judged broken for having no page.
      */
     public array $excludedCategoryGroupUids = [];
+
+    /**
+     * @var string[] Field UIDs whose content is never read for links.
+     *
+     * For a field that holds content nobody is going to fix, such as a legacy
+     * body kept after a migration. Excluding a Matrix field skips everything
+     * nested inside it. The rendered crawl reads pages, not fields, so it still
+     * finds links a template prints from an excluded field.
+     */
+    public array $excludedFieldUids = [];
 
     /**
      * @var bool Whether internal links are resolved against the site's own
@@ -362,89 +372,12 @@ class SettingsModel extends Model
     // Public Methods
     // =========================================================================
 
-    /**
-     * @inheritdoc
-     *
-     * @return array The validation rules.
-     * @author John Henry Donovan
-     * @since 1.0.0
-     */
-    public function rules(): array
-    {
-        return [
-            [
-                [
-                    'checkAnchorFragments',
-                    'checkIframes',
-                    'checkImages',
-                    'checkInternalLinks',
-                    'notifyEmailEnabled',
-                    'notifyOnNewBroken',
-                    'notifySlackEnabled',
-                    'pruneOrphanUrls',
-                    'renderedCrawlEnabled',
-                    'scanNavigationNodes',
-                    'scanOnSave',
-                    'scanPlainTextUrls',
-                    'scanRelationFields',
-                    'scheduledScanEnabled',
-                    'stripTrackingParams',
-                    'verifySsl',
-                ],
-                'boolean',
-            ],
-            [['concurrency'], 'integer', 'min' => 1, 'max' => 50],
-            [['maxConcurrentPerHost'], 'integer', 'min' => 1, 'max' => 10],
-            [['minHostDelayMs'], 'integer', 'min' => 0, 'max' => 60000],
-            [['connectTimeout'], 'integer', 'min' => 1, 'max' => 120],
-            [['timeout'], 'integer', 'min' => 1, 'max' => 300],
-            [['maxRedirects'], 'integer', 'min' => 0, 'max' => 20],
-            [['retryCount'], 'integer', 'min' => 0, 'max' => 10],
-            [['brokenAfterDnsFailures', 'brokenAfterFailures'], 'integer', 'min' => 1, 'max' => 20],
-            [['maxPagesToCrawl'], 'integer', 'min' => 1, 'max' => 100000],
-            [
-                [
-                    'blockedTtlDays',
-                    'brokenRecheckHours',
-                    'okTtlDays',
-                    'redirectTtlDays',
-                    'retainDays',
-                    'unreachableRecheckHours',
-                ],
-                'integer',
-                'min' => 0,
-            ],
-            [['notifyBrokenThreshold'], 'integer', 'min' => 1],
-            [['scheduledScanIntervalHours'], 'integer', 'min' => 1, 'max' => 8760],
-            [
-                [
-                    'notifyEmailRecipients',
-                    'notifySlackWebhookUrl',
-                    'proxy',
-                    'userAgent',
-                ],
-                'string',
-            ],
-            [['scannedElementTypes'], 'each', 'rule' => ['string'], 'skipOnEmpty' => true],
-            [['excludedCategoryGroupUids', 'excludedSectionUids'], 'each', 'rule' => ['string'], 'skipOnEmpty' => true],
-            [
-                [
-                    'botHostileHosts',
-                    'excludedUriPatterns',
-                    'ignoreHosts',
-                    'ignorePatterns',
-                    'internalUrlAllowPatterns',
-                ],
-                'safe',
-            ],
-        ];
-    }
 
     /**
      * @inheritdoc
      *
      * @return array The attribute labels.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function attributeLabels(): array
@@ -462,6 +395,7 @@ class SettingsModel extends Model
             'concurrency' => 'Concurrent Requests',
             'connectTimeout' => 'Connect Timeout (seconds)',
             'excludedCategoryGroupUids' => 'Excluded Category Groups',
+            'excludedFieldUids' => 'Excluded Fields',
             'excludedSectionUids' => 'Excluded Sections',
             'excludedUriPatterns' => 'Excluded URI Patterns',
             'ignoreHosts' => 'Ignored Hosts',
@@ -508,7 +442,7 @@ class SettingsModel extends Model
      * either, whatever a switch hidden behind a closed toggle still says.
      *
      * @return bool Whether a `#fragment` on an internal link is checked.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function checksAnchorFragments(): bool
@@ -522,7 +456,7 @@ class SettingsModel extends Model
      * version, and an information URL.
      *
      * @return string The resolved User-Agent.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getCheckerUserAgent(): string
@@ -547,7 +481,7 @@ class SettingsModel extends Model
      * dead class.
      *
      * @return int[] The section ids.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function excludedSectionIds(): array
@@ -574,7 +508,7 @@ class SettingsModel extends Model
      * shape and the same reasons.
      *
      * @return int[] The group ids.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function excludedCategoryGroupIds(): array
@@ -604,7 +538,7 @@ class SettingsModel extends Model
      * class name into the scan query.
      *
      * @return string[] The element type classes.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function resolvedScannedElementTypes(): array
@@ -619,7 +553,7 @@ class SettingsModel extends Model
      * when none is configured.
      *
      * @return string|null The resolved proxy URL.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getResolvedProxy(): ?string
@@ -627,6 +561,164 @@ class SettingsModel extends Model
         $proxy = trim(App::parseEnv($this->proxy));
 
         return $proxy !== '' ? $proxy : null;
+    }
+
+    /**
+     * Checks that every pattern in an editable table is a regular expression
+     * that compiles.
+     *
+     * A pattern that does not compile never matches, and the three places these
+     * are read all swallow the warning so one bad row cannot derail a scan.
+     * That is right where they are used and wrong here: without this the save
+     * goes through, the row sits there looking like a rule, and it quietly does
+     * nothing. An ignore that ignores nothing keeps reporting the links it was
+     * written to quiet; an exclusion that excludes nothing keeps scanning the
+     * pages it was written to leave alone.
+     *
+     * An empty pattern is not an error. The excluded URI patterns are written
+     * against a URI with no leading slash, so the homepage is matched by an
+     * empty one.
+     *
+     * The three tables do not agree on what the column is called: the excluded
+     * URI patterns carry `uriPattern`, the other two carry `pattern`. Reading
+     * the wrong one finds an empty string on every row and validates nothing at
+     * all, which is worse than not validating, because it looks like it works.
+     *
+     * @param string $attribute The attribute being validated.
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    public function validatePatterns(string $attribute): void
+    {
+        $column = $attribute === 'excludedUriPatterns' ? 'uriPattern' : 'pattern';
+
+        foreach ((array)$this->$attribute as $row) {
+            // A row switched off does not run, so a pattern parked in one is
+            // nobody's problem until it is switched back on.
+            if (is_array($row) && !(bool)($row['enabled'] ?? true)) {
+                continue;
+            }
+
+            $pattern = is_string($row) ? $row : (string)($row[$column] ?? '');
+            $pattern = trim($pattern);
+
+            if ($pattern === '') {
+                continue;
+            }
+
+            set_error_handler(static fn(): bool => true);
+
+            try {
+                $compiles = preg_match('~' . str_replace('~', '\~', $pattern) . '~', '') !== false;
+            } finally {
+                restore_error_handler();
+            }
+
+            if (!$compiles) {
+                $this->addError($attribute, Craft::t(
+                    'link-audit',
+                    '“{pattern}” is not a valid pattern, so it would never match anything.',
+                    ['pattern' => $pattern],
+                ));
+            }
+        }
+    }
+
+    // =========================================================================
+    // Protected Methods
+    // =========================================================================
+
+    /**
+     * @inheritdoc
+     *
+     * @return array The validation rules.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    protected function defineRules(): array
+    {
+        return array_merge(parent::defineRules(), [
+            [
+                [
+                    'checkAnchorFragments',
+                    'checkIframes',
+                    'checkImages',
+                    'checkInternalLinks',
+                    'notifyEmailEnabled',
+                    'notifyOnNewBroken',
+                    'notifySlackEnabled',
+                    'pruneOrphanUrls',
+                    'renderedCrawlEnabled',
+                    'scanNavigationNodes',
+                    'scanOnSave',
+                    'scanPlainTextUrls',
+                    'scanRelationFields',
+                    'scheduledScanEnabled',
+                    'stripTrackingParams',
+                    'verifySsl',
+                ],
+                'boolean',
+            ],
+            [['concurrency'], 'integer', 'min' => 1, 'max' => 50],
+            [['maxConcurrentPerHost'], 'integer', 'min' => 1, 'max' => 10],
+            [['minHostDelayMs'], 'integer', 'min' => 0, 'max' => 60000],
+            [['connectTimeout'], 'integer', 'min' => 1, 'max' => 120],
+            [['timeout'], 'integer', 'min' => 1, 'max' => 300],
+            [['maxRedirects'], 'integer', 'min' => 0, 'max' => 20],
+            [['retryCount'], 'integer', 'min' => 0, 'max' => 10],
+            [['brokenAfterDnsFailures', 'brokenAfterFailures'], 'integer', 'min' => 1, 'max' => 20],
+            [['maxPagesToCrawl'], 'integer', 'min' => 1, 'max' => 100000],
+            // Capped as well as floored. These are turned into a DateInterval
+            // to work out when a URL is next due, and a number big enough
+            // stops being a date: `P<huge>D` is refused outright and the check
+            // that was being scheduled throws instead. Ten years of days and a
+            // year of hours are past anything anybody means by "leave it".
+            [
+                [
+                    'blockedTtlDays',
+                    'okTtlDays',
+                    'redirectTtlDays',
+                    'retainDays',
+                ],
+                'integer',
+                'min' => 0,
+                'max' => 3650,
+            ],
+            [
+                ['brokenRecheckHours', 'unreachableRecheckHours'],
+                'integer',
+                'min' => 0,
+                'max' => 8760,
+            ],
+            [['notifyBrokenThreshold'], 'integer', 'min' => 1],
+            [['scheduledScanIntervalHours'], 'integer', 'min' => 1, 'max' => 8760],
+            [
+                [
+                    'notifyEmailRecipients',
+                    'notifySlackWebhookUrl',
+                    'proxy',
+                    'userAgent',
+                ],
+                'string',
+            ],
+            [['scannedElementTypes'], 'each', 'rule' => ['string'], 'skipOnEmpty' => true],
+            [['excludedCategoryGroupUids', 'excludedFieldUids', 'excludedSectionUids'], 'each', 'rule' => ['string'], 'skipOnEmpty' => true],
+            [
+                [
+                    'botHostileHosts',
+                    'excludedUriPatterns',
+                    'ignoreHosts',
+                    'ignorePatterns',
+                    'internalUrlAllowPatterns',
+                ],
+                'safe',
+            ],
+            [
+                ['excludedUriPatterns', 'ignorePatterns', 'internalUrlAllowPatterns'],
+                'validatePatterns',
+            ],
+        ]);
     }
 
     // =========================================================================
@@ -638,11 +730,16 @@ class SettingsModel extends Model
      * Falls back to a bare major when the instance is somehow unavailable.
      *
      * @return string The plugin version.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _pluginVersion(): string
     {
-        return LinkAudit::getInstance()?->version ?? '1.0';
+        // getInstance() rather than LinkAudit::$plugin, which is what the rest
+        // of the plugin reaches for. The fallback above is the reason: an
+        // unset typed static throws, and an Error is not something `??` steps
+        // around, so the one line promising a fallback would be the one line
+        // that could not give one.
+        return LinkAudit::getInstance()->version ?? '1.0';
     }
 }

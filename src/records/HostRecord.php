@@ -22,7 +22,7 @@ use craft\db\ActiveRecord;
  * @property string|null $blockedUntil
  * @property bool $botHostile
  * @property string|null $dateLastRequest
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class HostRecord extends ActiveRecord
@@ -35,7 +35,7 @@ class HostRecord extends ActiveRecord
      * @inheritdoc
      *
      * @return string The table name.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function tableName(): string

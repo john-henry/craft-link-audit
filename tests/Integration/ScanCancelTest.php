@@ -281,3 +281,43 @@ describe('The Overview while a scan is running', function() {
             ->assertDontSee('Stop this scan');
     });
 });
+
+// ---------------------------------------------------------------------------
+// What the refusal carries
+//
+// The exception is raised with the id of the run already going, and that id is
+// the whole of what anybody gets told: the console prints the message, the
+// scheduler logs it, and a caller that wants the number rather than the
+// sentence reads $scanId. Nothing asserted either, so a refusal naming the
+// wrong run, or naming none, would have read as a pass.
+// ---------------------------------------------------------------------------
+
+it('names the run that is actually going', function() {
+    $service = LinkAudit::getInstance()->getScanService();
+    $running = $service->startScan(ScanMode::Full);
+
+    try {
+        $service->startScan(ScanMode::Full);
+
+        throw new RuntimeException('the second start was not refused');
+    } catch (ScanInProgressException $e) {
+        expect($e->scanId)->toBe((int)$running->id)
+            // The console and the log get the id this way and no other.
+            ->and($e->getMessage())->toContain((string)$running->id);
+    }
+});
+
+it('gives the refusal a name of its own', function() {
+    // Craft puts this at the head of the error page, so it wants to read as
+    // something that happened rather than as a class name.
+    $service = LinkAudit::getInstance()->getScanService();
+    $service->startScan(ScanMode::Full);
+
+    try {
+        $service->startScan(ScanMode::Full);
+
+        throw new RuntimeException('the second start was not refused');
+    } catch (ScanInProgressException $e) {
+        expect($e->getName())->toBe('Scan in progress');
+    }
+});

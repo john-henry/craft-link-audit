@@ -3,15 +3,11 @@
 
 ![Link Audit](https://johnhenry.ie/images/plugins/promos/link-audit/1.png)
 
-
 # Link Audit for Craft CMS
 
-
-
-A broken link checker for Craft CMS 5.
-
-It goes through your stored content, gathers up every link, checks each unique address once, and
-shows you the entries carrying the ones that are broken.
+A broken link checker for Craft CMS 5. Links break on other people's sites and nobody tells you,
+so it goes through your stored content, checks each unique address once, and shows you the exact
+entries carrying the ones that are broken.
 
 ## The thinking behind it
 
@@ -57,18 +53,24 @@ because fetching every page is the expensive way to do it.
 
 ## Documentation
 
-Full documentation lives at [https://johnhenry.ie/plugins/link-audit/](https://johnhenry.ie/plugins/link-audit/)
-
-## Support
-Need a hand? Open an issue on our [GitHub Issues page](https://github.com/john-henry/craft-link-audit/issues)
-
-## License
-
-This package is licensed for free under the MIT License.
+Full documentation is at [johnhenry.ie/plugins/link-audit/docs](https://johnhenry.ie/plugins/link-audit/docs/getting-started/overview).
 
 ## Requirements
 
-Craft CMS 5.6.0 or later, and PHP 8.2 or later. 
+- Craft CMS 5.6 or later
+- PHP 8.2 or later
+
+## Accessibility
+
+How accessible the plugin is, what's been checked, and how to report a problem are all in the [accessibility statement](https://github.com/john-henry/craft-link-audit/blob/craft-5/ACCESSIBILITY.md).
+
+## Support
+
+Need a hand? Open an issue on the [GitHub Issues page](https://github.com/john-henry/craft-link-audit/issues).
+
+## License
+
+This plugin is free to use under the MIT License.
 
 ---
 

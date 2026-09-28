@@ -14,6 +14,7 @@ use craft\elements\User;
 use craft\helpers\DateTimeHelper;
 use craft\helpers\Db;
 use DateTimeInterface;
+use johnhenry\linkaudit\enums\ScanMode;
 use johnhenry\linkaudit\enums\ScanStatus;
 use johnhenry\linkaudit\enums\UrlStatus;
 use johnhenry\linkaudit\LinkAudit;
@@ -45,7 +46,7 @@ use yii\caching\TagDependency;
  * {@see UrlStore} and {@see ScanService}: nothing in here is date arithmetic for
  * its own sake, it is all a column on its way out of the database.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ReportService extends Component
@@ -94,6 +95,16 @@ class ReportService extends Component
      */
     private ?array $_siteHostsMemo = null;
 
+    /**
+     * @var int How many callers are holding count invalidation back.
+     */
+    private int $_countsHeld = 0;
+
+    /**
+     * @var bool Whether an invalidation was asked for while held.
+     */
+    private bool $_countsDirty = false;
+
     // =========================================================================
     // Public Methods
     // =========================================================================
@@ -113,7 +124,7 @@ class ReportService extends Component
      * @return array<string, int> Verdict value to count, plus
      *                            `permanentRedirect` and `dismissed`, exactly as
      *                            {@see self::verdictCounts()} returns them.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function cachedVerdictCounts(int $siteId): array
@@ -156,7 +167,7 @@ class ReportService extends Component
      * @return array{total: int, checked: int, broken: int, lastChecked: DateTimeInterface|null, brokenUrls: array<int, array<string, mixed>>}
      *         The totals, when the last of them was asked about, and the broken
      *         ones worth naming.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function elementSummary(int $elementId, int $siteId, int $limit = 10): array
@@ -248,7 +259,7 @@ class ReportService extends Component
      * @return string Its display name, or the class itself when the plugin that
      *                supplied it is no longer installed. A reference outlives
      *                its element type, so this really happens.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function elementTypeLabel(string $class): string
@@ -267,7 +278,7 @@ class ReportService extends Component
      * @param UrlStatus $status The verdict being listed.
      * @param int $siteId The site being read.
      * @return array<string, string> Element class to display name.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function elementTypeOptions(UrlStatus $status, int $siteId): array
@@ -313,7 +324,7 @@ class ReportService extends Component
      *                                       when it could be loaded.
      * @return string|null The label the editor sees, or the best fallback, or
      *                     null when the reference has no field.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function fieldName(array $row, ?ElementInterface $element): ?string
@@ -380,7 +391,7 @@ class ReportService extends Component
      * @param int $siteId The site being read.
      * @return array<string, string> Host to labelled host, alphabetically, in
      *                               the shape Craft's select macro takes.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function hostOptions(UrlStatus $status, int $siteId): array
@@ -407,18 +418,55 @@ class ReportService extends Component
     /**
      * Throws away every stored verdict count.
      *
-     * Called by the writes that can move one. Cheap enough to call per URL: it
-     * is a single cache write against a request that has just been over the
-     * network, and the alternative is a navigation badge that goes on claiming
-     * eleven broken links after the scan that fixed them has finished.
+     * Called by the writes that can move one. While a batch holds invalidation
+     * back ({@see self::holdCountInvalidation()}), it is recorded and done once
+     * when the batch lets go, so the badges' cache isn't kept permanently cold
+     * during a scan.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function invalidateCounts(): void
     {
+        if ($this->_countsHeld > 0) {
+            $this->_countsDirty = true;
+
+            return;
+        }
+
         TagDependency::invalidate(Craft::$app->getCache(), self::CACHE_TAG_COUNTS);
+    }
+
+    /**
+     * Holds count invalidation back until {@see self::releaseCountInvalidation()}.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    public function holdCountInvalidation(): void
+    {
+        $this->_countsHeld++;
+    }
+
+    /**
+     * Lets go of a hold, invalidating once if anything asked for it meanwhile.
+     *
+     * @param bool $all Whether to drop every hold, for when a job ended without
+     *                  releasing its own.
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    public function releaseCountInvalidation(bool $all = false): void
+    {
+        $this->_countsHeld = $all ? 0 : max(0, $this->_countsHeld - 1);
+
+        if ($this->_countsHeld === 0 && $this->_countsDirty) {
+            $this->_countsDirty = false;
+            $this->invalidateCounts();
+        }
     }
 
     /**
@@ -431,7 +479,7 @@ class ReportService extends Component
      * @return array<string, mixed>|null The scan row with its duration worked
      *                                   out, or null when nothing has finished
      *                                   yet.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function latestScan(): ?array
@@ -439,6 +487,9 @@ class ReportService extends Component
         $row = (new Query())
             ->from([ScanRecord::tableName()])
             ->where(['status' => [ScanStatus::Complete->value, ScanStatus::Cancelled->value]])
+            // One page reread from the edit screen, or the check that follows
+            // it, isn't a scan of the site.
+            ->andWhere(['mode' => [ScanMode::Full->value, ScanMode::Incremental->value]])
             ->orderBy(['dateFinished' => SORT_DESC, 'id' => SORT_DESC])
             ->one();
 
@@ -451,7 +502,7 @@ class ReportService extends Component
      * @param int $urlId The URL row.
      * @param int[] $siteIds The sites to count references on.
      * @return int The count.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function referenceCount(int $urlId, array $siteIds): int
@@ -478,7 +529,7 @@ class ReportService extends Component
      * @return array<int, array<string, mixed>> The references, each with its
      *                                          `element`, `editUrl` and the
      *                                          stored row's own columns.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function references(int $urlId, array $siteIds, ?User $user = null, int $limit = self::MAX_REFERENCES): array
@@ -503,7 +554,8 @@ class ReportService extends Component
             // Craft is left to look it up. That costs a query per row, which is
             // what the row limit is for.
             $element = $elements->getElementById($ownerId, null, $siteId);
-            $canView = $element !== null && $user !== null && $element->canView($user);
+            // No user means a trusted caller, such as the console export.
+            $canView = $element !== null && ($user === null || $element->canView($user));
 
             // The field label has to come off the element the link actually
             // sits on: a layout can override a field's label, and the override
@@ -527,8 +579,31 @@ class ReportService extends Component
                 }
             }
 
+            // A page this user can't open is said to exist and nothing more: its
+            // title, block, field and link text all come from content they
+            // aren't allowed to read.
+            if ($element !== null && !$canView) {
+                $references[] = [
+                    'element' => null,
+                    'hidden' => true,
+                    'elementType' => $this->elementTypeLabel((string)$row['elementType']),
+                    'editUrl' => null,
+                    'fieldHandle' => null,
+                    'fieldName' => null,
+                    'blockType' => null,
+                    'linkText' => null,
+                    'nested' => false,
+                    'rawHref' => null,
+                    'site' => Craft::$app->getSites()->getSiteById($siteId),
+                    'source' => (string)$row['source'],
+                ];
+
+                continue;
+            }
+
             $references[] = [
                 'element' => $element,
+                'hidden' => false,
                 'elementType' => $this->elementTypeLabel((string)$row['elementType']),
                 'editUrl' => $canView ? $this->referenceEditUrl($element, $row, $fieldElement, precise: true) : null,
                 'fieldHandle' => $row['fieldHandle'] !== null ? (string)$row['fieldHandle'] : null,
@@ -550,7 +625,7 @@ class ReportService extends Component
      *
      * @return array<string, mixed>|null The scan row, or null when nothing is
      *                                   running.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function runningScan(): ?array
@@ -564,6 +639,11 @@ class ReportService extends Component
                     ScanStatus::Checking->value,
                 ],
             ])
+            // Same staleness rule as the start guard, so a run whose worker
+            // died stops being polled.
+            ->andWhere(['>', 'dateUpdated', Db::prepareDateForDb(
+                DateTimeHelper::now()->modify('-' . ScanService::ABANDONED_AFTER_MINUTES . ' minutes'),
+            )])
             ->orderBy(['id' => SORT_DESC])
             ->one();
 
@@ -578,7 +658,7 @@ class ReportService extends Component
      * by two different names.
      *
      * @return array<string, string> Source handle to label.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function sourceOptions(): array
@@ -597,7 +677,7 @@ class ReportService extends Component
      * @param int $limit How many hosts to return.
      * @return array<int, array{host: string, total: int}> The hosts, worst
      *                                                     first.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function topHosts(int $siteId, int $limit = 5): array
@@ -634,7 +714,7 @@ class ReportService extends Component
      *
      * @param int $siteId The site being read.
      * @return int The count.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function internalBrokenCount(int $siteId): int
@@ -660,7 +740,7 @@ class ReportService extends Component
      * @param DateTimeInterface $workedSince Count URLs last known working at or
      *                                       after this moment.
      * @return int The count.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function recentlyBrokenCount(int $siteId, DateTimeInterface $workedSince): int
@@ -687,7 +767,7 @@ class ReportService extends Component
      * @param DateTimeInterface $since Count URLs first seen at or after this
      *                                 moment.
      * @return int The count.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function firstSeenBrokenCount(int $siteId, DateTimeInterface $since): int
@@ -717,7 +797,7 @@ class ReportService extends Component
      * @param int $siteId The site being read.
      * @param int $limit How many URLs to return.
      * @return array<int, array{url: string, urlHash: string, label: string, places: int}>
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function topBrokenByPlaces(int $siteId, int $limit = 5): array
@@ -758,7 +838,7 @@ class ReportService extends Component
      * @param int $referenceId The reference row.
      * @return array{siteId: int, blockId: int|null, fieldHandle: string|null, rawHref: string|null, linkText: string|null}|null
      *         The location, or null when no such reference exists.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function referenceLocation(int $referenceId): ?array
@@ -775,6 +855,16 @@ class ReportService extends Component
 
         $siteId = (int)$row['siteId'];
         $refElementId = (int)$row['elementId'];
+
+        // Only for someone who can open the page the link sits on.
+        $ownerId = $row['ownerElementId'] !== null ? (int)$row['ownerElementId'] : $refElementId;
+        $owner = Craft::$app->getElements()->getElementById($ownerId, null, $siteId);
+        $user = Craft::$app->getUser()->getIdentity();
+
+        if ($owner === null || $user === null || !$owner->canView($user)) {
+            return null;
+        }
+
         $nested = $row['ownerElementId'] !== null && (int)$row['ownerElementId'] !== $refElementId;
         $blockId = null;
         $fieldHandle = $row['fieldHandle'] !== null ? (string)$row['fieldHandle'] : null;
@@ -809,7 +899,7 @@ class ReportService extends Component
      *
      * @param string $label The full label.
      * @return string The label for a narrow column.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _panelLabel(string $label): string
@@ -834,7 +924,7 @@ class ReportService extends Component
      * The hosts this installation's sites answer on.
      *
      * @return string[] The hosts, lowercased.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _siteHosts(): array
@@ -873,7 +963,7 @@ class ReportService extends Component
      *         URL id to its location. The raw href and link text are what the
      *         edit screen can find the anchor itself by, inside a field too
      *         big for a field-level highlight to say much.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _urlLocationsOnElement(array $urlRows, int $elementId, int $siteId): array
@@ -973,7 +1063,7 @@ class ReportService extends Component
      * @param bool $precise Whether to name the reference row for the edit
      *                      screen to resolve, rather than the field or block.
      * @return string|null The edit URL, or null when the element has none.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function referenceEditUrl(
@@ -1028,7 +1118,7 @@ class ReportService extends Component
      * @param string $url The stored URL.
      * @param int $siteId The site being read.
      * @return string The label.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function urlLabel(string $url, int $siteId): string
@@ -1056,7 +1146,7 @@ class ReportService extends Component
      * @param int $limit How many pages to return.
      * @return array<int, array{element: ElementInterface|null, elementId: int, total: int}>
      *         The pages, worst first.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function topPages(int $siteId, int $limit = 5): array
@@ -1074,13 +1164,17 @@ class ReportService extends Component
             ->all();
 
         $elements = Craft::$app->getElements();
+        $user = Craft::$app->getUser()->getIdentity();
         $pages = [];
 
         foreach ($rows as $row) {
             $elementId = (int)$row['elementId'];
+            $element = $elements->getElementById($elementId, null, $siteId);
+            $hidden = $element !== null && $user !== null && !$element->canView($user);
 
             $pages[] = [
-                'element' => $elements->getElementById($elementId, null, $siteId),
+                'element' => $hidden ? null : $element,
+                'hidden' => $hidden,
                 'elementId' => $elementId,
                 'total' => (int)$row['total'],
             ];
@@ -1099,7 +1193,7 @@ class ReportService extends Component
      * @param string $hash The sha1 of the normalised URL.
      * @return array<string, mixed>|null The row, or null when no such URL has
      *                                   been seen.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function urlByHash(string $hash): ?array
@@ -1126,7 +1220,7 @@ class ReportService extends Component
      * @param array<string, mixed> $filters Any of `host`, `elementType`,
      *                                      `source`, `permanent`, `internal` and `search`.
      * @return int The count.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function urlCount(UrlStatus $status, int $siteId, array $filters = []): int
@@ -1157,7 +1251,7 @@ class ReportService extends Component
      * @param int $direction `SORT_ASC` or `SORT_DESC`.
      * @return array{total: int, rows: array<int, array<string, mixed>>} The page
      *         of rows, and how many there are in total.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function urlTable(
@@ -1220,7 +1314,7 @@ class ReportService extends Component
      * @return array<string, int> Verdict value to count, plus
      * `permanentRedirect`, the redirects worth acting on, and `dismissed`,
      *                            the count of decisions the Ignored screen lists.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function verdictCounts(int $siteId): array
@@ -1240,7 +1334,7 @@ class ReportService extends Component
      * @return array<string, int> Verdict value to count, plus
      * `permanentRedirect`, the redirects worth acting on, and `dismissed`,
      *                            the count of decisions the Ignored screen lists.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function verdictCountsForSites(array $siteIds): array
@@ -1302,7 +1396,7 @@ class ReportService extends Component
      * @param int $elementId The element being asked about.
      * @param int $siteId The site being read.
      * @return array<int, mixed> The condition, in Yii's array form.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _heldByElement(int $elementId, int $siteId): array
@@ -1331,7 +1425,7 @@ class ReportService extends Component
      *                                      which are properties of the
      *                                      reference rather than the URL.
      * @return Query The subquery.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _referencedOnSite(int|array $siteIds, array $filters = []): Query
@@ -1368,7 +1462,7 @@ class ReportService extends Component
      * @param int $siteId The site being read.
      * @param array<string, mixed> $filters The filters from the request.
      * @return Query The query.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _urlQuery(UrlStatus $status, int $siteId, array $filters): Query
@@ -1417,7 +1511,7 @@ class ReportService extends Component
      * @param array<string, mixed> $scan The scan row.
      * @return array<string, mixed> The row, with `durationSeconds` set when both
      *                              ends of the run are known.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _withDuration(array $scan): array

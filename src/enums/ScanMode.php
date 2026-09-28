@@ -19,7 +19,7 @@ use Craft;
  * did not see: only a full run has looked at everything, so only a full run may
  * conclude that a row it did not meet is stale.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 enum ScanMode: string
@@ -57,7 +57,7 @@ enum ScanMode: string
      * What this kind of run is called on screen.
      *
      * @return string The translated label.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function label(): string
@@ -79,7 +79,7 @@ enum ScanMode: string
      * throw away perfectly good references for everything it never looked at.
      *
      * @return bool Whether stale references may be pruned after this run.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function prunesStaleReferences(): bool

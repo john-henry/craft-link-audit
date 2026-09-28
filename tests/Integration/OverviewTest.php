@@ -324,4 +324,30 @@ describe('The overview screen', function() {
             ->assertOk()
             ->assertSee('Nothing has been scanned yet');
     });
+
+    // Before the first run the two scan buttons would do the same thing, and a
+    // newcomer has no way to tell which to press. Only the full scan is offered
+    // until a scan exists, beside steps saying what happens after pressing it.
+    it('walks a fresh install through its first scan', function() {
+        $this->get('admin/link-audit')
+            ->assertOk()
+            ->assertSee('id="link-audit-first-run"', false)
+            ->assertSee('Run full scan')
+            ->assertDontSee('value="incremental"', false);
+    });
+
+    it('drops the first-run steps and offers both scans once a scan has run', function() {
+        Db::insert(ScanRecord::tableName(), [
+            'siteId' => $this->siteId,
+            'mode' => ScanMode::Full->value,
+            'status' => ScanStatus::Complete->value,
+            'dateStarted' => Db::prepareDateForDb(new DateTime('-1 minute')),
+            'dateFinished' => Db::prepareDateForDb(new DateTime()),
+        ]);
+
+        $this->get('admin/link-audit')
+            ->assertOk()
+            ->assertDontSee('id="link-audit-first-run"', false)
+            ->assertSee('value="incremental"', false);
+    });
 });

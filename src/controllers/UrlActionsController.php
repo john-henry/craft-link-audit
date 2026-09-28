@@ -32,7 +32,7 @@ use yii\web\Response;
  * wants a flash message and a redirect. Supporting both is what lets the detail
  * page work with JavaScript switched off.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class UrlActionsController extends BaseController
@@ -49,7 +49,7 @@ class UrlActionsController extends BaseController
      * @throws ForbiddenHttpException If the user may not manage ignores.
      * @throws NotFoundHttpException If no URL has been seen with that hash, or
      *                               nothing on the user's sites points at it.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionIgnore(): Response
@@ -94,7 +94,7 @@ class UrlActionsController extends BaseController
      * @throws ForbiddenHttpException If the user may not run scans.
      * @throws NotFoundHttpException If no URL has been seen with that hash, or
      *                               nothing on the user's sites points at it.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionRecheck(): Response
@@ -113,7 +113,7 @@ class UrlActionsController extends BaseController
             );
         }
 
-        $checked = LinkAudit::$plugin->getScanService()->checkChunk([$row]);
+        $checked = LinkAudit::$plugin->getScanService()->checkChunk([$row], inline: true);
 
         if ($checked === 0) {
             return $this->_respond(
@@ -147,7 +147,7 @@ class UrlActionsController extends BaseController
      * @throws NotFoundHttpException If no element with that id can be seen on
      *                               the site.
      * @throws Throwable If the element's reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionRecheckElement(): Response
@@ -215,7 +215,7 @@ class UrlActionsController extends BaseController
      * @throws NotFoundHttpException If no URL has been seen with that hash,
      *                               nothing on the user's sites points at it, or
      *                               it was not ignored.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionRestore(): Response
@@ -232,7 +232,7 @@ class UrlActionsController extends BaseController
 
         $report = LinkAudit::$plugin->getReportService();
         $row = $report->urlByHash($hash);
-        $checked = $row !== null ? LinkAudit::$plugin->getScanService()->checkChunk([$row]) : 0;
+        $checked = $row !== null ? LinkAudit::$plugin->getScanService()->checkChunk([$row], inline: true) : 0;
 
         if ($checked === 0) {
             return $this->_respond(
@@ -258,7 +258,7 @@ class UrlActionsController extends BaseController
      *
      * @param mixed $value The stored value.
      * @return string The formatted date, or an empty string when there is none.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _formatDate(mixed $value): string
@@ -281,7 +281,7 @@ class UrlActionsController extends BaseController
      *
      * @return string The hash.
      * @throws BadRequestHttpException If the request carries no hash.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _requestedHash(): string
@@ -302,7 +302,7 @@ class UrlActionsController extends BaseController
      * @param array<string, mixed> $data Anything else the JSON caller wants.
      * @param bool $success Whether it worked.
      * @return Response The response.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _respond(string $message, array $data = [], bool $success = true): Response
@@ -337,7 +337,7 @@ class UrlActionsController extends BaseController
      * @throws ForbiddenHttpException If the user may not edit any site.
      * @throws NotFoundHttpException If no URL has been seen with that hash, or
      *                               nothing on the user's sites points at it.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _url(string $hash): array
@@ -359,7 +359,7 @@ class UrlActionsController extends BaseController
      * @param array<string, mixed> $fresh The row as it stands after the check.
      * @param UrlStatus $status The row's status.
      * @return array<string, mixed> The payload.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _verdictPayload(array $fresh, UrlStatus $status): array

@@ -3,6 +3,7 @@
 {% import '_includes/forms.twig' as forms %}
 
 {% set title = 'URL'|t('link-audit') %}
+{% set selectedSubnavItem = 'overview' %}
 {% set returnUrl = 'link-audit/url?hash=' ~ url.urlHash %}
 {% set crumbs = [
     { label: 'Link Audit'|t('link-audit'), url: cpUrl('link-audit') },
@@ -97,8 +98,8 @@
             {% if url.finalUrl %}
                 <div class="data">
                     <dt class="heading">{{ 'Ends Up At'|t('link-audit') }}</dt>
-                    <dd class="value" style="word-break:break-all">
-                        {{ url.finalUrl }}
+                    <dd class="value" style="word-break:break-all; gap:0.5em; flex-wrap:wrap">
+                        <span>{{ url.finalUrl }}</span>
                         <span class="light">
                             {{ '{count, plural, =1{one hop} other{# hops}}'|t('link-audit', { count: url.redirectCount }) }}
                             {% if url.redirectPermanent %}
@@ -254,6 +255,8 @@
                             <td>
                                 {% if reference.editUrl %}
                                     <a href="{{ reference.editUrl }}">{{ reference.element.uiLabel }}</a>
+                                {% elseif reference.hidden ?? false %}
+                                    <span class="light">{{ 'A page you can’t view'|t('link-audit') }}</span>
                                 {% elseif reference.element %}
                                     {{ reference.element.uiLabel }}
                                 {% else %}

@@ -7,12 +7,15 @@
 namespace johnhenry\linkaudit\controllers;
 
 use Craft;
+use craft\helpers\ArrayHelper;
 use craft\web\View;
+use johnhenry\linkaudit\helpers\LinkFields;
 use johnhenry\linkaudit\helpers\ScannableElementTypes;
 use johnhenry\linkaudit\LinkAudit;
 use johnhenry\linkaudit\models\SettingsModel;
 use yii\web\BadRequestHttpException;
 use yii\web\ForbiddenHttpException;
+use yii\web\MethodNotAllowedHttpException;
 use yii\web\Response;
 
 /**
@@ -32,7 +35,7 @@ use yii\web\Response;
  * needs `allowAdminChanges` as well, checked again on the server: the form is
  * rendered read-only without it, but a form is not a gate.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class SettingsController extends BaseController
@@ -52,7 +55,7 @@ class SettingsController extends BaseController
      * @return bool Whether the action may run.
      * @throws ForbiddenHttpException If the user is not an admin, or may not read
      *                                the reports.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function beforeAction($action): bool
@@ -70,7 +73,7 @@ class SettingsController extends BaseController
      * The caching and retention tab.
      *
      * @return Response The rendered page.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionCaching(): Response
@@ -82,7 +85,7 @@ class SettingsController extends BaseController
      * The HTTP tab.
      *
      * @return Response The rendered page.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionHttp(): Response
@@ -94,7 +97,7 @@ class SettingsController extends BaseController
      * The ignore rules tab.
      *
      * @return Response The rendered page.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionIgnores(): Response
@@ -106,7 +109,7 @@ class SettingsController extends BaseController
      * Sends anybody arriving at the bare settings URL to the first tab.
      *
      * @return Response The redirect.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionIndex(): Response
@@ -118,7 +121,7 @@ class SettingsController extends BaseController
      * The notifications tab.
      *
      * @return Response The rendered page.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionNotifications(): Response
@@ -134,7 +137,7 @@ class SettingsController extends BaseController
      * @throws BadRequestHttpException If the request is not a POST.
      * @throws ForbiddenHttpException If settings are read-only on this
      *                                environment.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionSaveCaching(): Response
@@ -163,7 +166,8 @@ class SettingsController extends BaseController
      * @throws BadRequestHttpException If the request is not a POST.
      * @throws ForbiddenHttpException If settings are read-only on this
      *                                environment.
-     * @author John Henry Donovan
+     * @throws MethodNotAllowedHttpException If the request is not a POST.
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionSaveHttp(): Response
@@ -197,7 +201,7 @@ class SettingsController extends BaseController
      * @throws BadRequestHttpException If the request is not a POST.
      * @throws ForbiddenHttpException If settings are read-only on this
      *                                environment.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionSaveIgnores(): Response
@@ -237,7 +241,7 @@ class SettingsController extends BaseController
      * @throws BadRequestHttpException If the request is not a POST.
      * @throws ForbiddenHttpException If settings are read-only on this
      *                                environment.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionSaveNotifications(): Response
@@ -271,7 +275,7 @@ class SettingsController extends BaseController
      * @throws BadRequestHttpException If the request is not a POST.
      * @throws ForbiddenHttpException If settings are read-only on this
      *                                environment.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionSaveScanning(): Response
@@ -281,6 +285,7 @@ class SettingsController extends BaseController
         $settings->scannedElementTypes = $this->_elementTypes($settings->scannedElementTypes);
         $settings->excludedSectionUids = $this->_uidList('excludedSectionUids', $settings->excludedSectionUids);
         $settings->excludedCategoryGroupUids = $this->_uidList('excludedCategoryGroupUids', $settings->excludedCategoryGroupUids);
+        $settings->excludedFieldUids = $this->_uidList('excludedFieldUids', $settings->excludedFieldUids);
         $settings->scanOnSave = $this->_bool('scanOnSave', $settings->scanOnSave);
         $settings->checkInternalLinks = $this->_bool('checkInternalLinks', $settings->checkInternalLinks);
         $settings->checkImages = $this->_bool('checkImages', $settings->checkImages);
@@ -294,7 +299,7 @@ class SettingsController extends BaseController
         $settings->stripTrackingParams = $this->_bool('stripTrackingParams', $settings->stripTrackingParams);
         $settings->excludedUriPatterns = $this->_rows(
             'excludedUriPatterns',
-            ['enabled' => 'bool', 'siteId' => 'siteId', 'uriPattern' => 'string'],
+            ['enabled' => 'bool', 'siteUid' => 'siteUid', 'uriPattern' => 'string'],
             ['uriPattern'],
             $settings->excludedUriPatterns,
         );
@@ -316,7 +321,7 @@ class SettingsController extends BaseController
      * @throws BadRequestHttpException If the request is not a POST.
      * @throws ForbiddenHttpException If settings are read-only on this
      *                                environment.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionSaveSchedule(): Response
@@ -336,7 +341,7 @@ class SettingsController extends BaseController
      * The scanning tab.
      *
      * @return Response The rendered page.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionScanning(): Response
@@ -348,7 +353,7 @@ class SettingsController extends BaseController
      * The schedule tab.
      *
      * @return Response The rendered page.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionSchedule(): Response
@@ -368,7 +373,8 @@ class SettingsController extends BaseController
      * @throws BadRequestHttpException If the request is not a POST.
      * @throws ForbiddenHttpException If settings are read-only on this
      *                                environment.
-     * @author John Henry Donovan
+     * @throws MethodNotAllowedHttpException If the request is not a POST.
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _beginSave(): SettingsModel
@@ -391,7 +397,7 @@ class SettingsController extends BaseController
      * @param bool $current What it holds now, used when the field was not
      *                      posted.
      * @return bool The value.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _bool(string $name, bool $current): bool
@@ -408,7 +414,7 @@ class SettingsController extends BaseController
      *
      * @param string[]|null $current What it holds now.
      * @return string[]|null The value.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _elementTypes(?array $current): ?array
@@ -441,7 +447,7 @@ class SettingsController extends BaseController
      * @param string[] $current The stored value, kept when the field was not
      *                          posted at all.
      * @return string[] The value.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _uidList(string $key, array $current): array
@@ -470,12 +476,30 @@ class SettingsController extends BaseController
      * @param SettingsModel $settings The settings to write.
      * @param string $tab The tab that posted, so a refusal comes back to it.
      * @return Response The redirect, or the tab again with its errors showing.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _finishSave(SettingsModel $settings, string $tab): Response
     {
-        $saved = Craft::$app->getPlugins()->savePluginSettings(LinkAudit::$plugin, $settings->toArray());
+        // Craft has already merged config/link-audit.php into the model. Those
+        // values belong to the file, often read from the environment, so the
+        // project config keeps whatever it held for them.
+        $data = $settings->toArray();
+        $stored = Craft::$app->getProjectConfig()->get('plugins.link-audit.settings') ?? [];
+
+        foreach (array_keys(Craft::$app->getConfig()->getConfigFromFile('link-audit')) as $key) {
+            if (!array_key_exists($key, $data)) {
+                continue;
+            }
+
+            if (is_array($stored) && array_key_exists($key, $stored)) {
+                $data[$key] = $stored[$key];
+            } else {
+                unset($data[$key]);
+            }
+        }
+
+        $saved = Craft::$app->getPlugins()->savePluginSettings(LinkAudit::$plugin, $data);
 
         if (!$saved) {
             $this->setFailFlash(Craft::t(
@@ -485,6 +509,10 @@ class SettingsController extends BaseController
 
             return $this->_render($tab);
         }
+
+        // A setting may have changed what should be checked, so links ignored
+        // because of one are looked at again.
+        LinkAudit::$plugin->getUrlStore()->releaseSettingIgnores();
 
         $this->setSuccessFlash(Craft::t('app', 'Settings saved.'));
 
@@ -503,7 +531,7 @@ class SettingsController extends BaseController
      * @param int $current What it holds now, used when the field was not
      *                     posted, or was posted empty.
      * @return int The value.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _int(string $name, int $current): int
@@ -526,7 +554,7 @@ class SettingsController extends BaseController
      *
      * @param string $tab The tab template, which is also its key in the tab bar.
      * @return Response The rendered page.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _render(string $tab): Response
@@ -545,6 +573,7 @@ class SettingsController extends BaseController
 
         if ($tab === 'scanning') {
             $variables['elementTypeOptions'] = ScannableElementTypes::all();
+            $variables['linkFieldOptions'] = LinkFields::options();
             $variables['scannedElementTypes'] = $settings->resolvedScannedElementTypes();
         }
 
@@ -567,7 +596,7 @@ class SettingsController extends BaseController
      * @param string $name The setting name.
      * @param array<string, string> $columns The columns to keep, each named with
      *                                       the kind of value it holds: `bool`,
-     *                                       `siteId` or `string`.
+     *                                       `siteUid` or `string`.
      * @param string[] $required The columns that make a row worth keeping. A row
      *                           with none of them filled in is an empty "add
      *                           row" nobody typed into.
@@ -575,7 +604,7 @@ class SettingsController extends BaseController
      *                                                  when the table was not
      *                                                  posted.
      * @return array<int, array<string, mixed>> The rows.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _rows(string $name, array $columns, array $required, array $current): array
@@ -587,6 +616,7 @@ class SettingsController extends BaseController
         }
 
         $rows = [];
+        $siteUids = ArrayHelper::getColumn(Craft::$app->getSites()->getAllSites(true), 'uid');
 
         foreach ($posted as $postedRow) {
             if (!is_array($postedRow)) {
@@ -600,10 +630,10 @@ class SettingsController extends BaseController
 
                 $row[$column] = match ($kind) {
                     'bool' => (bool)$value,
-                    // An empty site means every site, and is kept as an empty
-                    // string rather than a zero, which is what the readers of
-                    // this setting compare against.
-                    'siteId' => trim((string)$value) === '' ? '' : (int)$value,
+                    // A site is kept by UID, which is the same in every
+                    // environment. Empty means every site, and anything that
+                    // isn't a real site's UID is treated as empty.
+                    'siteUid' => in_array(trim((string)$value), $siteUids, true) ? trim((string)$value) : '',
                     default => trim((string)$value),
                 };
             }
@@ -627,7 +657,7 @@ class SettingsController extends BaseController
      * The plugin's settings.
      *
      * @return SettingsModel The settings.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _settings(): SettingsModel
@@ -642,7 +672,7 @@ class SettingsController extends BaseController
      * @param string $current What it holds now, used when the field was not
      *                        posted.
      * @return string The value.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _string(string $name, string $current): string

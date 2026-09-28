@@ -37,7 +37,7 @@ use yii\base\InvalidConfigException;
  * table to read, and a plugin has no business guessing at whatever has been
  * configured in its place.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class QueueJobs
@@ -74,7 +74,7 @@ class QueueJobs
      *
      * @return int How many jobs are ours.
      * @throws InvalidConfigException If the queue component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function count(): int
@@ -98,7 +98,7 @@ class QueueJobs
      *
      * @return int How many jobs were released.
      * @throws InvalidConfigException If the queue component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function release(): int
@@ -131,7 +131,7 @@ class QueueJobs
      *
      * @return iterable<int, string[]> Batches of queue row ids.
      * @throws InvalidConfigException If the queue component cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _ourRowIds(): iterable
@@ -175,7 +175,7 @@ class QueueJobs
      *
      * @param mixed $job The stored column value.
      * @return string The bytes, or an empty string when they cannot be read.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _payload(mixed $job): string

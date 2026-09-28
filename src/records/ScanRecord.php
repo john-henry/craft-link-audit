@@ -19,12 +19,13 @@ use craft\db\ActiveRecord;
  * @property string $mode
  * @property string $status
  * @property int $elementsScanned
+ * @property int $pagesCrawled
  * @property int $urlsTotal
  * @property int $urlsChecked
  * @property int $urlsBroken
  * @property string|null $dateStarted
  * @property string|null $dateFinished
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ScanRecord extends ActiveRecord
@@ -37,7 +38,7 @@ class ScanRecord extends ActiveRecord
      * @inheritdoc
      *
      * @return string The table name.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function tableName(): string

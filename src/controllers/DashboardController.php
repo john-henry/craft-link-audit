@@ -25,7 +25,7 @@ use yii\web\Response;
  * then the two lists that turn a number into an afternoon's work, which are the
  * hosts causing the most trouble and the pages carrying the most of it.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class DashboardController extends BaseController
@@ -42,7 +42,7 @@ class DashboardController extends BaseController
      *                                may not edit any site.
      * @throws InvalidConfigException If a service, the site or the action URL
      *                                cannot be resolved.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionIndex(): Response

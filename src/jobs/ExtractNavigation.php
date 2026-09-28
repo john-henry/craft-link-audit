@@ -22,7 +22,7 @@ use Throwable;
  * Small enough to be a plain job. Even a large site has hundreds of nodes, not
  * hundreds of thousands, and each one is a stored URL rather than a field walk.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ExtractNavigation extends BaseJob
@@ -51,7 +51,7 @@ class ExtractNavigation extends BaseJob
      * @param mixed $queue The queue running the job.
      * @return void
      * @throws Throwable If the reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function execute($queue): void
@@ -70,7 +70,7 @@ class ExtractNavigation extends BaseJob
      * @inheritdoc
      *
      * @return string|null The description shown in the queue.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function defaultDescription(): ?string

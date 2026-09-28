@@ -14,7 +14,7 @@ namespace johnhenry\linkaudit\enums;
  * the report; an `ftp:` is recorded as ignored, so an author can see the plugin
  * met it and chose not to check it.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 enum SchemeKind: string

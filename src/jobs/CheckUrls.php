@@ -28,11 +28,21 @@ use johnhenry\linkaudit\queue\ChunkedUrlBatcher;
  * and found well last week is not in the pending set at all, so a rescan pays
  * only for what has gone stale.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class CheckUrls extends BaseBatchedJob
 {
+    // =========================================================================
+    // Const Properties
+    // =========================================================================
+
+    /**
+     * @var int Seconds added to the worked-out worst case, for the database
+     * writes and the scan bookkeeping either side of the requests.
+     */
+    private const _TTR_MARGIN_SECONDS = 30;
+
     // =========================================================================
     // Public Properties
     // =========================================================================
@@ -58,6 +68,11 @@ class CheckUrls extends BaseBatchedJob
     public int $cursorId = 0;
 
     /**
+     * @var bool Whether finishing the scan sends notifications.
+     */
+    public bool $notify = true;
+
+    /**
      * @var int The scan this job belongs to.
      */
     public int $scanId = 0;
@@ -69,6 +84,43 @@ class CheckUrls extends BaseBatchedJob
      */
     public ?int $totalChunks = null;
 
+    /**
+     * @var int[]|null Only these URL rows, for a recheck of one page. Null
+     * checks everything that is due.
+     */
+    public ?array $urlIds = null;
+
+    // =========================================================================
+    // Public Methods
+    // =========================================================================
+
+    /**
+     * @inheritdoc
+     *
+     * States how long this step can take, rather than leaving the queue to
+     * assume its default five minutes.
+     *
+     * A step is a hundred URLs, and what a hundred URLs cost depends entirely
+     * on settings: at one request at a time with a five minute timeout, every
+     * one of them could take as long as the whole default time to run. Craft
+     * hands a job that outlives its time to run to the next worker from the
+     * start, so the step would make all hundred requests again, and again, and
+     * never finish. That is the one thing {@see \johnhenry\linkaudit\services\RequestScheduler} exists to
+     * avoid, and it bounds its own waiting for exactly this reason; nothing was
+     * bounding the requests.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    public function init(): void
+    {
+        // Set before the parent, which only fills it in when it is still null.
+        $this->ttr ??= $this->_worstCaseSeconds();
+
+        parent::init();
+    }
+
     // =========================================================================
     // Protected Methods
     // =========================================================================
@@ -78,12 +130,25 @@ class CheckUrls extends BaseBatchedJob
      * checked.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function after(): void
     {
-        QueueHelper::push(new FinaliseScan(['scanId' => $this->scanId]));
+        QueueHelper::push(new FinaliseScan(['scanId' => $this->scanId, 'notify' => $this->notify]));
+    }
+
+    /**
+     * Holds count-cache invalidation back for the batch, so it happens once
+     * at the end rather than once per URL.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    protected function beforeBatch(): void
+    {
+        LinkAudit::$plugin->getReportService()->holdCountInvalidation();
     }
 
     /**
@@ -102,11 +167,13 @@ class CheckUrls extends BaseBatchedJob
      * {@see self::after()} and the scan goes on to be finished.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function afterBatch(): void
     {
+        LinkAudit::$plugin->getReportService()->releaseCountInvalidation();
+
         $batcher = $this->data();
         assert($batcher instanceof ChunkedUrlBatcher);
 
@@ -121,7 +188,7 @@ class CheckUrls extends BaseBatchedJob
      * Moves the scan into the check phase and pins the chunk count.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function before(): void
@@ -135,7 +202,7 @@ class CheckUrls extends BaseBatchedJob
      * @inheritdoc
      *
      * @return string|null The description shown in the queue.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function defaultDescription(): ?string
@@ -147,13 +214,19 @@ class CheckUrls extends BaseBatchedJob
      * @inheritdoc
      *
      * @return Batchable The chunks of URLs to check.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function loadData(): Batchable
     {
+        $query = LinkAudit::$plugin->getUrlStore()->pendingQuery();
+
+        if ($this->urlIds !== null) {
+            $query->andWhere(['id' => $this->urlIds]);
+        }
+
         return new ChunkedUrlBatcher(
-            query: LinkAudit::$plugin->getUrlStore()->pendingQuery(),
+            query: $query,
             chunkSize: max(1, $this->chunkSize),
             cursorId: $this->cursorId,
             total: $this->totalChunks,
@@ -166,7 +239,7 @@ class CheckUrls extends BaseBatchedJob
      * @param mixed $item One chunk of URL rows.
      * @throws Exception If a time to live setting cannot be turned into an
      *                   interval.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function processItem(mixed $item): void
@@ -176,5 +249,34 @@ class CheckUrls extends BaseBatchedJob
         }
 
         LinkAudit::$plugin->getScanService()->checkChunk($item, $this->scanId);
+    }
+
+    // =========================================================================
+    // Private Methods
+    // =========================================================================
+
+    /**
+     * The longest this step could honestly take.
+     *
+     * Each chunk stops starting requests once the scheduler's run time is up,
+     * so a chunk costs at most that, plus its waiting budget, plus the slowest
+     * request still in flight: a HEAD and a GET, each with a timeout per
+     * redirect hop. Never shorter than the queue's own default.
+     *
+     * @return int The seconds to reserve.
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0
+     */
+    private function _worstCaseSeconds(): int
+    {
+        $settings = LinkAudit::$plugin->getSettings();
+        $scheduler = LinkAudit::$plugin->getRequestScheduler();
+
+        $slowestRequest = 2 * (max(0, $settings->maxRedirects) + 1) * max(1, $settings->timeout);
+        $perChunk = (int)ceil($scheduler->maxRunSeconds + $scheduler->maxYieldSeconds) + $slowestRequest;
+
+        $seconds = max(1, $this->batchSize) * $perChunk + self::_TTR_MARGIN_SECONDS;
+
+        return max($seconds, (int)Craft::$app->getQueue()->ttr);
     }
 }

@@ -15,7 +15,7 @@ use Throwable;
  * Closes a scan out: recount, tidy away what is no longer referenced, and mark
  * the run finished.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class FinaliseScan extends BaseJob
@@ -29,6 +29,11 @@ class FinaliseScan extends BaseJob
      */
     public int $scanId = 0;
 
+    /**
+     * @var bool Whether finishing the scan sends notifications.
+     */
+    public bool $notify = true;
+
     // =========================================================================
     // Public Methods
     // =========================================================================
@@ -39,12 +44,12 @@ class FinaliseScan extends BaseJob
      * @param mixed $queue The queue running the job.
      * @return void
      * @throws Throwable If the tidy up cannot be completed.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function execute($queue): void
     {
-        LinkAudit::$plugin->getScanService()->finalise($this->scanId);
+        LinkAudit::$plugin->getScanService()->finalise($this->scanId, $this->notify);
     }
 
     // =========================================================================
@@ -55,7 +60,7 @@ class FinaliseScan extends BaseJob
      * @inheritdoc
      *
      * @return string|null The description shown in the queue.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function defaultDescription(): ?string

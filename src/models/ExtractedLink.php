@@ -22,7 +22,7 @@ use johnhenry\linkaudit\enums\UrlStatus;
  * rebuilding purposes and to the entry for editing purposes, and the control
  * panel needs both.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ExtractedLink
@@ -90,7 +90,7 @@ class ExtractedLink
      * @param string|null $linkText The anchor text, alt text or label, for the
      *                              report.
      * @param string $source One of the SOURCE_* constants.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function __construct(
@@ -118,7 +118,7 @@ class ExtractedLink
      *
      * @param int $elementId The element the link points at.
      * @return string The stand-in URL.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function syntheticUrl(int $elementId): string
@@ -138,7 +138,7 @@ class ExtractedLink
      *
      * @param int $elementId The element the relation points at.
      * @return string The stand-in URL.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function relationSyntheticUrl(int $elementId): string
@@ -161,7 +161,7 @@ class ExtractedLink
      *
      * @param string $url The URL to read.
      * @return string|null One of the *_SYNTHETIC_SCHEME constants, or null.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function standInScheme(string $url): ?string
@@ -182,7 +182,7 @@ class ExtractedLink
      * already decided not to check.
      *
      * @return UrlStatus The status.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function initialStatus(): UrlStatus
@@ -197,7 +197,7 @@ class ExtractedLink
      * external URL's HTTP verdict does not, so its row is global.
      *
      * @return bool Whether the link is internal to this installation.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isInternal(): bool
@@ -214,7 +214,7 @@ class ExtractedLink
      * @param int $urlId The URL row this reference points at.
      * @param int|null $scanId The scan that recorded it, when there is one.
      * @return array<string, mixed> The reference row.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function toReference(int $urlId, ?int $scanId = null): array

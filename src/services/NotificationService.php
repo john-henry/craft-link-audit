@@ -46,7 +46,7 @@ use yii\base\Component;
  * The Guzzle client is injectable, in the same shape {@see HttpChecker} uses, so
  * a test can prove that a disabled channel makes no request at all.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class NotificationService extends Component
@@ -85,7 +85,7 @@ class NotificationService extends Component
      * The HTTP client webhooks go out on.
      *
      * @return ClientInterface The client.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getClient(): ClientInterface
@@ -106,7 +106,7 @@ class NotificationService extends Component
      *                                   it.
      * @return bool Whether a message was sent. False is the ordinary answer:
      *              both channels off, or a count under the threshold.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function notifyScanComplete(array $scan): bool
@@ -152,7 +152,7 @@ class NotificationService extends Component
      * @param string $subject The lead line.
      * @param string $body The message.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function postToSlack(string $subject, string $body): void
@@ -176,6 +176,7 @@ class NotificationService extends Component
         try {
             $this->getClient()->request('POST', $webhookUrl, [
                 RequestOptions::TIMEOUT => self::_WEBHOOK_TIMEOUT,
+                RequestOptions::ALLOW_REDIRECTS => false,
                 RequestOptions::HEADERS => ['Content-Type' => 'application/json'],
                 RequestOptions::BODY => Json::encode([
                     'username' => Craft::t('link-audit', 'Link Audit'),
@@ -196,7 +197,7 @@ class NotificationService extends Component
      * @param string $subject The subject line.
      * @param string $body The message.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function sendEmail(string $subject, string $body): void
@@ -226,7 +227,7 @@ class NotificationService extends Component
      *
      * @param ClientInterface $client The client.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function setClient(ClientInterface $client): void
@@ -246,7 +247,7 @@ class NotificationService extends Component
      * @param array<int, array<string, mixed>> $urls The ones being named.
      * @param array<string, mixed> $scan The scan row.
      * @return string The body.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _body(int $total, array $urls, array $scan): string
@@ -315,7 +316,7 @@ class NotificationService extends Component
      *
      * @param array<string, mixed> $scan The scan row.
      * @return Query The query, newest breakage first.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _brokenQuery(array $scan): Query
@@ -351,7 +352,7 @@ class NotificationService extends Component
      *
      * @param array<string, mixed> $scan The scan row.
      * @return string The control panel URL.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _reportUrl(array $scan): string
@@ -377,7 +378,7 @@ class NotificationService extends Component
      * list is the sort of thing that differs between staging and production.
      *
      * @return string[] The addresses.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _recipients(): array
@@ -395,7 +396,7 @@ class NotificationService extends Component
      * The plugin's settings.
      *
      * @return SettingsModel The settings.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _settings(): SettingsModel
@@ -408,7 +409,7 @@ class NotificationService extends Component
      *
      * @param string $text The text.
      * @return string The escaped text.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _slackEscape(string $text): string
@@ -421,7 +422,7 @@ class NotificationService extends Component
      *
      * @param int $total How many broken links were counted.
      * @return string The subject.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _subject(int $total): string

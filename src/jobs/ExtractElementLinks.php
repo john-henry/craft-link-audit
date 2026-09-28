@@ -25,7 +25,7 @@ use Throwable;
  * requests, and the verdict is worth more once the host has stopped being
  * hammered by the save that caused it.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ExtractElementLinks extends BaseJob
@@ -49,7 +49,7 @@ class ExtractElementLinks extends BaseJob
      * @param mixed $queue The queue running the job.
      * @return void
      * @throws Throwable If the element's reference rows cannot be rebuilt.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function execute($queue): void
@@ -65,7 +65,7 @@ class ExtractElementLinks extends BaseJob
      * @inheritdoc
      *
      * @return string|null The description shown in the queue.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function defaultDescription(): ?string

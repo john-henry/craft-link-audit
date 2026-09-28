@@ -8,7 +8,11 @@ namespace johnhenry\linkaudit\base;
 
 use Craft;
 use craft\base\Element;
+use craft\db\Query;
+use craft\db\Table;
+use craft\errors\SiteNotFoundException;
 use craft\events\DefineHtmlEvent;
+use craft\events\ModelEvent;
 use craft\events\RegisterComponentTypesEvent;
 use craft\events\RegisterUrlRulesEvent;
 use craft\events\RegisterUserPermissionsEvent;
@@ -17,6 +21,7 @@ use craft\helpers\ElementHelper;
 use craft\helpers\Queue as QueueHelper;
 use craft\helpers\UrlHelper;
 use craft\log\MonologTarget;
+use craft\queue\Queue;
 use craft\services\Dashboard;
 use craft\services\Gc;
 use craft\services\UserPermissions;
@@ -34,6 +39,8 @@ use Psr\Log\LogLevel;
 use Throwable;
 use yii\base\Event;
 use yii\base\InvalidConfigException;
+use yii\base\InvalidRouteException;
+use yii\queue\ExecEvent;
 
 /**
  * Wires the plugin's event listeners and lifecycle overrides.
@@ -41,7 +48,7 @@ use yii\base\InvalidConfigException;
  * The main class stays a thin shell: everything Craft has to be told about
  * lives here.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 trait PluginTrait
@@ -77,7 +84,8 @@ trait PluginTrait
      * @return array<string, mixed>|null The nav item, or null when this user has
      *                                   no business in the section.
      * @throws InvalidConfigException If the primary site cannot be resolved.
-     * @author John Henry Donovan
+     * @throws SiteNotFoundException
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getCpNavItem(): ?array
@@ -155,7 +163,8 @@ trait PluginTrait
      * itself static and refuses the saves.
      *
      * @return mixed The redirect.
-     * @author John Henry Donovan
+     * @throws InvalidRouteException
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getReadOnlySettingsResponse(): mixed
@@ -169,7 +178,7 @@ trait PluginTrait
      * Narrows the base return type for callers and static analysis.
      *
      * @return SettingsModel The plugin settings model.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function getSettings(): SettingsModel
@@ -184,8 +193,9 @@ trait PluginTrait
      * @inheritdoc
      *
      * @return mixed The redirect to the plugin's own settings screen.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
+     * @throws InvalidRouteException
      */
     public function getSettingsResponse(): mixed
     {
@@ -209,7 +219,7 @@ trait PluginTrait
      * plugin that left a row behind.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function beforeUninstall(): void
@@ -227,7 +237,7 @@ trait PluginTrait
      * @inheritdoc
      *
      * @return SettingsModel The plugin settings model.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     protected function createSettingsModel(): SettingsModel
@@ -259,7 +269,7 @@ trait PluginTrait
      * @param array<string, mixed> $item The nav item, badged in place.
      * @param int|null $siteId The site being read, or null when there is not one.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _addNavBadges(array &$item, ?int $siteId): void
@@ -312,9 +322,17 @@ trait PluginTrait
      * share the answer. What differs between them is only which event Craft
      * raises, which is the registering method's business.
      *
+     * Nothing here is allowed to fail a save, for the same reason nothing in
+     * {@see self::_registerReferenceCleanup()} is allowed to fail a delete. This
+     * runs on EVENT_AFTER_PROPAGATE, inside the save's own transaction, and it
+     * asks an element for its root owner and the queue for a row: an author
+     * should not be told their page could not be saved because a link audit
+     * table would not tidy itself up. A reading that was never queued is picked
+     * up by the next scan.
+     *
      * @param Event $e The element event.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _onContentChange(Event $e): void
@@ -325,13 +343,20 @@ trait PluginTrait
             return;
         }
 
-        $elementId = self::_pageToReread($element);
+        try {
+            $elementId = self::_pageToReread($element);
 
-        if ($elementId === null) {
-            return;
+            if ($elementId === null) {
+                return;
+            }
+
+            self::_queueExtraction($elementId);
+        } catch (Throwable $err) {
+            Craft::error(
+                'Could not queue a reread after a content change: ' . $err->getMessage(),
+                'link-audit',
+            );
         }
-
-        self::_queueExtraction($elementId);
     }
 
     /**
@@ -349,7 +374,8 @@ trait PluginTrait
      * @param Element $element The element that was saved.
      * @return int|null The element id to reread, or null when this save is not
      *                  worth a job.
-     * @author John Henry Donovan
+     * @throws InvalidConfigException
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _pageToReread(Element $element): ?int
@@ -381,7 +407,9 @@ trait PluginTrait
             return null;
         }
 
-        if (!$root->enabled || ElementHelper::isDraftOrRevision($root)) {
+        // A disabled root still gets a job: rereading it is what clears its
+        // links off the report, since the scan query no longer returns it.
+        if (ElementHelper::isDraftOrRevision($root)) {
             return null;
         }
 
@@ -414,7 +442,7 @@ trait PluginTrait
      *
      * @param int $elementId The element to reread.
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private static function _queueExtraction(int $elementId): void
@@ -437,7 +465,7 @@ trait PluginTrait
      * so a link to it means the same URL on every environment.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerCpUrlRules(): void
@@ -481,7 +509,7 @@ trait PluginTrait
      * truth is that it was never read.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerElementSidebarPanel(): void
@@ -500,9 +528,15 @@ trait PluginTrait
                 return;
             }
 
-            // A draft or a revision has no references of its own, and the
-            // canonical element's would be reported here as though they were
-            // this version's.
+            // Editing a live entry works on a provisional draft, and the
+            // canonical entry's links are the ones on the report.
+            if ($element->isProvisionalDraft) {
+                $element = $element->getCanonical();
+            }
+
+            // A saved draft or a revision has no references of its own, and
+            // the canonical element's would be reported here as though they
+            // were this version's.
             if (ElementHelper::isDraftOrRevision($element)) {
                 return;
             }
@@ -538,26 +572,26 @@ trait PluginTrait
             // is an author who cannot edit their page.
             try {
                 $summary = LinkAudit::$plugin->getReportService()->elementSummary(
-                        (int)$element->id,
-                        (int)$site->id,
-                    );
+                    (int)$element->id,
+                    (int)$site->id,
+                );
 
                 $e->html .= Craft::$app->getView()->renderTemplate(
-                        'link-audit/_sidebar/links-panel',
-                        [
-                            'element' => $element,
-                            'site' => $site,
-                            'summary' => $summary,
-                            'canRunScans' => Craft::$app->getUser()->checkPermission(
-                                BaseController::PERMISSION_RUN_SCANS,
-                            ),
-                        ],
-                    );
+                    'link-audit/_sidebar/links-panel',
+                    [
+                        'element' => $element,
+                        'site' => $site,
+                        'summary' => $summary,
+                        'canRunScans' => Craft::$app->getUser()->checkPermission(
+                            BaseController::PERMISSION_RUN_SCANS,
+                        ),
+                    ],
+                );
             } catch (Throwable $err) {
                 Craft::error(
-                        "Could not render the links panel for element $element->id: " . $err->getMessage(),
-                        'link-audit',
-                    );
+                    "Could not render the links panel for element $element->id: " . $err->getMessage(),
+                    'link-audit',
+                );
             }
         };
 
@@ -597,7 +631,7 @@ trait PluginTrait
      * the setting is off it is two comparisons and no queries at all.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerGarbageCollection(): void
@@ -610,6 +644,55 @@ trait PluginTrait
             } catch (Throwable $e) {
                 Craft::error('Could not queue the scheduled scan: ' . $e->getMessage(), 'link-audit');
             }
+
+            try {
+                LinkAudit::$plugin->getScanService()->pruneHistory();
+            } catch (Throwable $e) {
+                Craft::error('Could not prune the scan history: ' . $e->getMessage(), 'link-audit');
+            }
+        });
+    }
+
+    /**
+     * Listens to the queue: a scan job that fails for good marks its scan
+     * failed, and per-job state (the extraction memo, any held count
+     * invalidation) is cleared between jobs.
+     *
+     * The memo stops one request queueing the same element twice. A web queue
+     * runner runs several jobs in one request, so without the reset a second
+     * import saving the same element would never have it reread.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    private function _registerQueueEvents(): void
+    {
+        Event::on(Queue::class, Queue::EVENT_AFTER_ERROR, static function(ExecEvent $event): void {
+            $job = $event->job;
+
+            LinkAudit::$plugin->getReportService()->releaseCountInvalidation(all: true);
+
+            if (
+                $event->retry
+                || $job === null
+                || !str_starts_with($job::class, 'johnhenry\\linkaudit\\jobs\\')
+                || !property_exists($job, 'scanId')
+            ) {
+                return;
+            }
+
+            $scanId = (int)$job->scanId;
+
+            if ($scanId > 0) {
+                LinkAudit::$plugin->getScanService()->markFailed($scanId);
+            }
+        });
+
+        Event::on(Queue::class, Queue::EVENT_AFTER_EXEC, static function(): void {
+            self::$_queuedForExtraction = [];
+            LinkAudit::$plugin->getInternalResolver()->clearMemo();
+            LinkAudit::$plugin->getReportService()->releaseCountInvalidation(all: true);
         });
     }
 
@@ -619,7 +702,7 @@ trait PluginTrait
      * read without fishing through web.log and queue.log.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerLogTarget(): void
@@ -646,7 +729,7 @@ trait PluginTrait
      * link does not matter is not the same decision as asking for a scan.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerPermissions(): void
@@ -685,7 +768,7 @@ trait PluginTrait
      * own, and Craft deletes them constantly.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerReferenceCleanup(): void
@@ -708,7 +791,11 @@ trait PluginTrait
                 // page should not be told their page could not be deleted
                 // because a link audit table would not tidy itself up.
                 try {
-                    LinkAudit::$plugin->getUrlStore()->deleteReferencesForElement((int)$element->id);
+                    $store = LinkAudit::$plugin->getUrlStore();
+                    $store->deleteReferencesForElement((int)$element->id);
+                    // Links elsewhere that point at the deleted page are now
+                    // broken, so they go to the front of the next check.
+                    $store->bringForwardLinksTo((int)$element->id);
                 } catch (Throwable $err) {
                     Craft::error(
                         "Could not clear the links held against deleted element $element->id: "
@@ -718,6 +805,55 @@ trait PluginTrait
                 }
             },
         );
+    }
+
+    /**
+     * Brings forward the check on links pointing at a page whose URI is about
+     * to change, so a moved page's old address is rechecked on the next run.
+     *
+     * Runs before the save because that is the last moment the old URI can be
+     * read from the database.
+     *
+     * @return void
+     * @author John Henry Donovan <info@johnhenry.ie>
+     * @since 1.0.0-beta.8
+     */
+    private function _registerUriChangeRecheck(): void
+    {
+        Event::on(Element::class, Element::EVENT_BEFORE_SAVE, static function(ModelEvent $e): void {
+            $element = $e->sender;
+
+            if (
+                !$element instanceof Element
+                || $element->id === null
+                || $element->uri === null
+                || ElementHelper::isDraftOrRevision($element)
+            ) {
+                return;
+            }
+
+            try {
+                $oldUri = (new Query())
+                    ->select(['uri'])
+                    ->from([Table::ELEMENTS_SITES])
+                    ->where(['elementId' => $element->id, 'siteId' => $element->siteId])
+                    ->scalar();
+
+                if (!is_string($oldUri) || $oldUri === $element->uri) {
+                    return;
+                }
+
+                LinkAudit::$plugin->getUrlStore()->bringForwardLinksTo(
+                    (int)$element->id,
+                    [(int)$element->siteId => $oldUri],
+                );
+            } catch (Throwable $err) {
+                Craft::error(
+                    "Could not bring forward the links to element $element->id: " . $err->getMessage(),
+                    'link-audit',
+                );
+            }
+        });
     }
 
     /**
@@ -733,7 +869,7 @@ trait PluginTrait
      * same, because the question is the same question.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerRestoreExtraction(): void
@@ -756,7 +892,7 @@ trait PluginTrait
      * fields full of links, which is the same call the scan query makes.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerScanOnSave(): void
@@ -773,7 +909,7 @@ trait PluginTrait
      * by people.
      *
      * @return void
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     private function _registerWidgetTypes(): void

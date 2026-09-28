@@ -23,7 +23,7 @@ use johnhenry\linkaudit\enums\UrlStatus;
  * written about it. {@see self::isDeferred()} is how a caller tells the two
  * apart, and the scheduler uses it to hand the URL back for a later pass.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class Verdict
@@ -74,6 +74,12 @@ class Verdict
     public const REASON_IGNORE_RULE = 'ignore-rule';
 
     /**
+     * @var string Not checked because of a setting: internal link checking is
+     * off, the target's section is excluded, or it matches an allow pattern.
+     */
+    public const REASON_SETTING = 'setting';
+
+    /**
      * An internal link resolved to no element and matched no route.
      */
     public const REASON_NO_ELEMENT = 'no-element';
@@ -121,7 +127,7 @@ class Verdict
      *
      * @param int|null $code The HTTP status code.
      * @return string|null The plain meaning, or null when there is no code.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function httpStatusLabel(?int $code): ?string
@@ -167,7 +173,7 @@ class Verdict
      *
      * @param string|null $reason The stored reason code.
      * @return string|null The label, or null when there is no reason at all.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public static function reasonLabel(?string $reason): ?string
@@ -184,6 +190,7 @@ class Verdict
             self::REASON_HTTP => Craft::t('link-audit', 'The server answered with an error'),
             self::REASON_IGNORED => Craft::t('link-audit', 'Ignored by a person'),
             self::REASON_IGNORE_RULE => Craft::t('link-audit', 'Ignored by a rule in the settings'),
+            self::REASON_SETTING => Craft::t('link-audit', 'Not checked, per the settings'),
             self::REASON_NO_ELEMENT => Craft::t('link-audit', 'Nothing on this site answers to it'),
             self::REASON_PRIVATE_IP => Craft::t('link-audit', 'Not safe to request'),
             self::REASON_RATE_LIMITED => Craft::t('link-audit', 'The host asked us to ease off'),
@@ -225,7 +232,7 @@ class Verdict
      * @param int $attempts How many attempts this verdict took. Set by the
      *                      scheduler, which owns retries; the checker itself
      *                      always reports one.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function __construct(
@@ -249,7 +256,7 @@ class Verdict
      * again on a later pass and write nothing in the meantime.
      *
      * @return bool Whether this is a deferral rather than a verdict.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function isDeferred(): bool
@@ -262,7 +269,7 @@ class Verdict
      *
      * @param int $attempts How many attempts the verdict took.
      * @return self The copy.
-     * @author John Henry Donovan
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function withAttempts(int $attempts): self

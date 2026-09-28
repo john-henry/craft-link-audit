@@ -218,6 +218,11 @@
         // are drawn: what the address answered, then where it ended up. Not
         // every row carries that first code, and one that does not draws the
         // landing code on its own.
+        // Craft's admin table renders a column without a callback as raw HTML.
+        function textCell(value) {
+            return value === null || value === undefined ? '' : Craft.escapeHtml(String(value));
+        }
+
         function codeCell(value) {
             if (!value || !value.status) {
                 return '';
@@ -305,6 +310,7 @@
             {
                 name: 'host',
                 title: Craft.t('link-audit', 'Host'),
+                callback: textCell,
                 sortField: true,
                 titleClass: 'la-col-sm-hide',
                 dataClass: 'la-col-sm-hide',
@@ -319,6 +325,7 @@
             {
                 name: 'refs',
                 title: Craft.t('link-audit', 'Places'),
+                callback: textCell,
                 sortField: true,
                 titleClass: 'rightalign',
                 dataClass: 'rightalign',
@@ -326,6 +333,7 @@
             {
                 name: 'checked',
                 title: Craft.t('link-audit', 'Last Checked'),
+                callback: textCell,
                 sortField: true,
                 titleClass: 'la-col-sm-hide',
                 dataClass: 'la-col-sm-hide',

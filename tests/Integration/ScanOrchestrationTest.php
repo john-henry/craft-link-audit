@@ -340,7 +340,7 @@ it('leaves out an element whose URI matches an excluded pattern', function() {
     LinkAudit::getInstance()->getSettings()->excludedUriPatterns = [
         [
             'uriPattern' => '^' . preg_quote((string)$entries[0]->uri, '~') . '$',
-            'siteId' => '',
+            'siteUid' => '',
             'enabled' => true,
         ],
     ];
@@ -376,7 +376,7 @@ it('treats an empty pattern as the homepage and nothing else', function() {
     $siteId = Craft::$app->getSites()->getPrimarySite()->id;
 
     LinkAudit::getInstance()->getSettings()->excludedUriPatterns = [
-        ['uriPattern' => '', 'siteId' => '', 'enabled' => true],
+        ['uriPattern' => '', 'siteUid' => '', 'enabled' => true],
     ];
 
     expect($service->isUriExcluded(null, $siteId))->toBeTrue()

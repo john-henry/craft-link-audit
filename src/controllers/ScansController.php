@@ -14,6 +14,7 @@ use johnhenry\linkaudit\LinkAudit;
 use yii\base\InvalidConfigException;
 use yii\web\BadRequestHttpException;
 use yii\web\ForbiddenHttpException;
+use yii\web\MethodNotAllowedHttpException;
 use yii\web\Response;
 
 /**
@@ -23,7 +24,7 @@ use yii\web\Response;
  * the console `scan` commands: the two do the same work but one of them is
  * driven by a person who wants a page back afterwards.
  *
- * @author John Henry Donovan
+ * @author John Henry Donovan <info@johnhenry.ie>
  * @since 1.0.0
  */
 class ScansController extends BaseController
@@ -43,8 +44,8 @@ class ScansController extends BaseController
      * @return Response A redirect back to wherever the button was.
      * @throws BadRequestHttpException If the request is not a POST.
      * @throws ForbiddenHttpException If the user may not run scans.
-     * @throws InvalidConfigException If the queue component cannot be resolved.
-     * @author John Henry Donovan
+     * @throws InvalidConfigException|MethodNotAllowedHttpException If the queue component cannot be resolved.
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionCancel(): Response
@@ -84,7 +85,8 @@ class ScansController extends BaseController
      * @throws ForbiddenHttpException If the user may not run scans, or may not
      *                                edit any site.
      * @throws InvalidConfigException If the site cannot be resolved.
-     * @author John Henry Donovan
+     * @throws MethodNotAllowedHttpException
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionStart(): Response
@@ -126,7 +128,8 @@ class ScansController extends BaseController
      * @return Response The progress, as JSON.
      * @throws ForbiddenHttpException If the user may not read the reports.
      * @throws BadRequestHttpException If the request does not accept JSON.
-     * @author John Henry Donovan
+     * @throws InvalidConfigException If the report service cannot be resolved.
+     * @author John Henry Donovan <info@johnhenry.ie>
      * @since 1.0.0
      */
     public function actionStatus(): Response
@@ -145,7 +148,7 @@ class ScansController extends BaseController
             'success' => true,
             'scan' => [
                 'id' => (int)$scan['id'],
-                'status' => $status?->value ?? (string)$scan['status'],
+                'status' => $status->value ?? (string)$scan['status'],
                 'statusLabel' => $status?->label() ?? (string)$scan['status'],
                 'mode' => (string)$scan['mode'],
                 'elementsScanned' => (int)$scan['elementsScanned'],
